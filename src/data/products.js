@@ -1,0 +1,178 @@
+export const categories = [
+  { name: 'Cashew', slug: 'cashew', emoji: '🥜' },
+  { name: 'Almonds', slug: 'almonds', emoji: '🌰' },
+  { name: 'Raisins', slug: 'raisins', emoji: '🍇' },
+  { name: 'Cranberries', slug: 'cranberries', emoji: '🔴' },
+  { name: 'Makhana', slug: 'makhana', emoji: '⚪' },
+  { name: 'Walnut', slug: 'walnut', emoji: '🌰' },
+  { name: 'Pista', slug: 'pista', emoji: '💚' },
+  { name: 'Seeds', slug: 'seeds', emoji: '🌱' },
+]
+
+export const products = [
+  {
+    id: 1,
+    name: 'Premium Cashew Nuts',
+    slug: 'premium-cashew-nuts',
+    category: 'Cashew',
+    rating: 4.8,
+    reviews: 124,
+    bestseller: true,
+    featured: true,
+    isNew: false,
+    description: 'Premium quality Kimish cashew nuts with a creamy bite, carefully packed for everyday snacking and gifting.',
+    ingredients: '100% Cashew Nuts',
+    storage: 'Store in a cool, dry place. Keep airtight after opening.',
+    images: ['/products/kimish-cashew.png'],
+    variants: [
+      { weight: '100g', price: 189, mrp: 229, stock: 30 },
+      { weight: '250g', price: 429, mrp: 499, stock: 22 },
+      { weight: '500g', price: 819, mrp: 949, stock: 15 },
+      { weight: '1kg', price: 1549, mrp: 1799, stock: 8 }
+    ]
+  },
+  {
+    id: 2,
+    name: 'Premium Mamra Almond',
+    slug: 'premium-mamra-almond',
+    category: 'Almonds',
+    rating: 4.8,
+    reviews: 98,
+    bestseller: true,
+    featured: true,
+    isNew: false,
+    description: 'Premium Kimish Mamra almonds with a naturally rich flavour and satisfying crunch.',
+    ingredients: '100% Mamra Almonds',
+    storage: 'Store away from heat and moisture in an airtight container.',
+    images: ['/products/kimish-mamra-almond.png'],
+    variants: [
+      { weight: '100g', price: 199, mrp: 249, stock: 42 },
+      { weight: '250g', price: 449, mrp: 549, stock: 26 },
+      { weight: '500g', price: 859, mrp: 999, stock: 19 },
+      { weight: '1kg', price: 1649, mrp: 1899, stock: 11 }
+    ]
+  },
+  {
+    id: 3,
+    name: 'Premium Golden Raisins',
+    slug: 'premium-golden-raisins',
+    category: 'Raisins',
+    rating: 4.7,
+    reviews: 77,
+    bestseller: true,
+    featured: true,
+    isNew: false,
+    description: 'Naturally sweet premium golden raisins from Kimish, ideal for snacking, desserts and breakfast bowls.',
+    ingredients: '100% Raisins',
+    storage: 'Keep sealed in a cool, dry place. Refrigerate after opening for longer freshness.',
+    images: ['/products/kimish-raisins.png'],
+    variants: [
+      { weight: '250g', price: 249, mrp: 349, stock: 34 },
+      { weight: '500g', price: 459, mrp: 549, stock: 18 },
+      { weight: '1kg', price: 879, mrp: 999, stock: 9 }
+    ]
+  },
+  {
+    id: 4,
+    name: 'Premium Walnut Kernels',
+    slug: 'premium-walnut-kernels',
+    category: 'Walnut',
+    rating: 4.8,
+    reviews: 63,
+    bestseller: true,
+    featured: false,
+    isNew: false,
+    description: 'Light, crunchy walnut kernels suitable for snacking, baking and breakfast bowls.',
+    ingredients: '100% Walnut Kernels',
+    storage: 'Keep refrigerated after opening.',
+    images: ['/products/kimish-walnut-kernels.png'],
+    variants: [
+      { weight: '100g', price: 199, mrp: 239, stock: 24 },
+      { weight: '250g', price: 469, mrp: 549, stock: 17 },
+      { weight: '500g', price: 899, mrp: 1049, stock: 12 }
+    ]
+  },
+  {
+    id: 5,
+    name: 'Roasted Salted Pistachios',
+    slug: 'roasted-salted-pistachios',
+    category: 'Pista',
+    rating: 4.7,
+    reviews: 88,
+    bestseller: true,
+    featured: true,
+    isNew: false,
+    description: 'Roasted pistachios with a balanced salt finish for premium everyday snacking.',
+    ingredients: 'Pistachios, Salt',
+    storage: 'Store airtight in a cool, dry place.',
+    images: ['https://images.unsplash.com/photo-1525059337994-6f2a1311b4d4?auto=format&fit=crop&w=1200&q=80'],
+    variants: [
+      { weight: '100g', price: 199, mrp: 249, stock: 29 },
+      { weight: '250g', price: 459, mrp: 549, stock: 20 },
+      { weight: '500g', price: 879, mrp: 999, stock: 14 }
+    ]
+  },
+  {
+    id: 6,
+    name: 'Healthy Seed Mix',
+    slug: 'healthy-seed-mix',
+    category: 'Seeds',
+    rating: 4.5,
+    reviews: 55,
+    bestseller: false,
+    featured: false,
+    isNew: true,
+    description: 'A balanced mix of pumpkin, sunflower, flax and watermelon seeds.',
+    ingredients: 'Pumpkin Seeds, Sunflower Seeds, Flax Seeds, Watermelon Seeds',
+    storage: 'Keep airtight and consume within the recommended period after opening.',
+    images: ['/products/kimish-healthy-seed-mix.png'],
+    variants: [
+      { weight: '200g', price: 229, mrp: 279, stock: 40 },
+      { weight: '500g', price: 519, mrp: 629, stock: 18 }
+    ]
+  },
+  {
+    id: 7,
+    name: 'Premium Dried Cranberries',
+    slug: 'premium-dried-cranberries',
+    category: 'Cranberries',
+    rating: 4.7,
+    reviews: 61,
+    bestseller: false,
+    featured: true,
+    isNew: true,
+    description: 'Premium dried cranberries with a bright sweet-tart flavour, perfect for snacking, salads, baking and breakfast bowls.',
+    ingredients: 'Dried Cranberries',
+    storage: 'Store in a cool, dry place in an airtight container after opening.',
+    images: ['/products/kimish-cranberries.png'],
+    variants: [
+      { weight: '200g', price: 299, mrp: 349, stock: 28 },
+      { weight: '500g', price: 649, mrp: 749, stock: 16 }
+    ]
+  },
+  {
+    id: 8,
+    name: 'Jumbo Hand Picked Makhana',
+    slug: 'jumbo-hand-picked-makhana',
+    category: 'Makhana',
+    rating: 4.8,
+    reviews: 72,
+    bestseller: false,
+    featured: true,
+    isNew: true,
+    description: 'Premium jumbo hand-picked makhana with a light, crisp texture for wholesome everyday snacking.',
+    ingredients: '100% Makhana (Fox Nuts)',
+    storage: 'Keep sealed in a cool, dry place and protect from moisture.',
+    images: ['/products/kimish-makhana.png'],
+    variants: [
+      { weight: '100g', price: 199, mrp: 249, stock: 35 },
+      { weight: '250g', price: 449, mrp: 529, stock: 20 },
+      { weight: '500g', price: 849, mrp: 999, stock: 12 }
+    ]
+  }
+]
+
+export const coupons = {
+  KIMISH10: { type: 'percent', value: 10, minCart: 999, label: '10% off above ₹999' },
+  SAVE150: { type: 'fixed', value: 150, minCart: 1499, label: '₹150 off above ₹1499' },
+}

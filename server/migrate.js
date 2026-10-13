@@ -1,0 +1,1 @@
+import {readFileSync} from 'node:fs';import {fileURLToPath} from 'node:url';import {createPool} from './db.js';const pool=createPool(process.env);try{const sql=readFileSync(fileURLToPath(new URL('./migrations/20261011_security.sql',import.meta.url)),'utf8');await pool.query(sql);console.log('Security migration applied')}finally{await pool.end()}
