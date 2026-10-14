@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 // Compare against whitespace-free source so code formatting doesn't affect these checks
 const compact = (path) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\s+/g, '')
 const api = compact('./api.js')
-const admin = compact('../src/admin/Admin.jsx')
+const gallery = compact('../src/admin/components/GalleryManager.jsx')
 test('sensitive admin CRUD endpoints use authorization middleware', () => {
   for (const route of [
     "api.get('/api/admin/:module',guardSensitive",
@@ -15,6 +15,6 @@ test('sensitive admin CRUD endpoints use authorization middleware', () => {
     assert.ok(api.includes(route), route)
 })
 test('gallery batch persists image field rather than URL field', () => {
-  assert.ok(admin.includes('product_id:editor.id,image:signed.publicUrl'))
-  assert.ok(admin.includes('multipleaccept='))
+  assert.ok(gallery.includes('product_id:productId,image:url'))
+  assert.ok(gallery.includes('multipleaccept='))
 })

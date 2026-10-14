@@ -1,7 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import Admin from './Admin'
+import AdminLayout from './layout/AdminLayout'
+import LoginPage from './pages/LoginPage'
+import ModuleRoute from './pages/ModuleRoute'
+import NotFoundPage from './pages/NotFoundPage'
+import OrdersPage from './pages/OrdersPage'
+import OverviewPage from './pages/OverviewPage'
+import ProductsPage from './pages/ProductsPage'
+import SettingsPage from './pages/SettingsPage'
+import { AdminSessionProvider, RequireAdmin } from './session/AdminSession'
 import './admin-base.css'
 import './admin.css'
 import './admin-layout.css'
@@ -38,14 +46,32 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Every admin address (/admin, /admin/login, /admin/products, …) renders Admin, which picks the screen from the URL
 ReactDOM.createRoot(document.getElementById('root')).render(
   <ErrorBoundary>
     <BrowserRouter>
-      <Routes>
-        <Route path="/admin/*" element={<Admin />} />
-        <Route path="*" element={<Navigate to="/admin" replace />} />
-      </Routes>
+      <AdminSessionProvider>
+        <Routes>
+          <Route path="/admin/login" element={<LoginPage />} />
+          <Route
+            path="/admin"
+            element={
+              <RequireAdmin>
+                <AdminLayout />
+              </RequireAdmin>
+            }
+          >
+            <Route index element={<OverviewPage />} />
+            <Route path="overview" element={<Navigate to="/admin" replace />} />
+            {/* Screens with their own page; every other screen uses the generic ModulePage */}
+            <Route path="products" element={<ProductsPage />} />
+            <Route path="orders" element={<OrdersPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path=":slug" element={<ModuleRoute />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Routes>
+      </AdminSessionProvider>
     </BrowserRouter>
   </ErrorBoundary>,
 )

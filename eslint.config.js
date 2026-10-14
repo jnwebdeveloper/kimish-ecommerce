@@ -39,7 +39,8 @@ export default [
     files: [
       'src/data/StoreContext.jsx',
       'src/auth/AuthContext.jsx',
-      'src/admin/adminPresentation.jsx',
+      'src/admin/components/adminPresentation.jsx',
+      'src/admin/session/AdminSession.jsx',
     ],
     rules: { 'react-refresh/only-export-components': 'off' },
   },

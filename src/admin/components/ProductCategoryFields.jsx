@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { categoryPath, categoryGroup, categoryOptions } from '../data/categoryHierarchy'
+import { categoryPath, categoryGroup, categoryOptions } from '../../data/categoryHierarchy'
 
 export default function ProductCategoryFields({ categories = [], groups = [], value, onChange }) {
   const path = categoryPath(categories, value)

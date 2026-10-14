@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiRequest } from '../data/StoreContext'
+import { apiRequest } from '../../data/StoreContext'
 
 // Lets the admin choose which saved Shiprocket pickup address is used for rate estimates and shipment creation.
 export default function ShiprocketPickupPanel() {
