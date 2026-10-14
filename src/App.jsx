@@ -35,19 +35,31 @@ export default function App() {
   const location = useLocation()
 
   useEffect(() => {
-    setCart(previous => previous.flatMap(item => {
-      const product = products.find(p => p.id === item.product.id || p.slug === item.product.slug)
-      const variant = product?.variants.find(v => v.weight === item.variant.weight)
-      return variant ? [{ ...item, product, variant }] : []
-    }))
+    setCart((previous) =>
+      previous.flatMap((item) => {
+        const product = products.find(
+          (p) => p.id === item.product.id || p.slug === item.product.slug,
+        )
+        const variant = product?.variants.find((v) => v.weight === item.variant.weight)
+        return variant ? [{ ...item, product, variant }] : []
+      }),
+    )
   }, [products])
 
   useEffect(() => {
-    try { localStorage.setItem('kimish-cart', JSON.stringify(cart)) } catch (error) { console.warn('Could not save cart', error) }
+    try {
+      localStorage.setItem('kimish-cart', JSON.stringify(cart))
+    } catch (error) {
+      console.warn('Could not save cart', error)
+    }
   }, [cart])
 
   useEffect(() => {
-    try { localStorage.setItem('kimish-wishlist', JSON.stringify(wishlist)) } catch (error) { console.warn('Could not save wishlist', error) }
+    try {
+      localStorage.setItem('kimish-wishlist', JSON.stringify(wishlist))
+    } catch (error) {
+      console.warn('Could not save wishlist', error)
+    }
   }, [wishlist])
 
   useEffect(() => {
@@ -55,36 +67,60 @@ export default function App() {
   }, [location.pathname])
 
   function addToCart(product, variant) {
-    setCart(prev => {
-      const idx = prev.findIndex(i => i.product.id === product.id && i.variant.weight === variant.weight)
-      if (idx >= 0) return prev.map((i,n) => n === idx ? { ...i, qty: i.qty + 1 } : i)
+    setCart((prev) => {
+      const idx = prev.findIndex(
+        (i) => i.product.id === product.id && i.variant.weight === variant.weight,
+      )
+      if (idx >= 0) return prev.map((i, n) => (n === idx ? { ...i, qty: i.qty + 1 } : i))
       return [...prev, { product, variant, qty: 1 }]
     })
-    if (window.fbq) window.fbq('track', 'AddToCart', { content_ids: [String(product.id)], content_name: product.name, content_type: 'product', value: Number(variant.price), currency: 'INR' })
+    if (window.fbq)
+      window.fbq('track', 'AddToCart', {
+        content_ids: [String(product.id)],
+        content_name: product.name,
+        content_type: 'product',
+        value: Number(variant.price),
+        currency: 'INR',
+      })
   }
 
   function updateQty(item, qty) {
-    setCart(prev => prev.map(i =>
-      i.product.id === item.product.id && i.variant.weight === item.variant.weight ? { ...i, qty } : i
-    ))
+    setCart((prev) =>
+      prev.map((i) =>
+        i.product.id === item.product.id && i.variant.weight === item.variant.weight
+          ? { ...i, qty }
+          : i,
+      ),
+    )
   }
 
   function removeFromCart(item) {
-    setCart(prev => prev.filter(i => !(i.product.id === item.product.id && i.variant.weight === item.variant.weight)))
+    setCart((prev) =>
+      prev.filter(
+        (i) => !(i.product.id === item.product.id && i.variant.weight === item.variant.weight),
+      ),
+    )
   }
 
   function toggleWishlist(id) {
-    setWishlist(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+    setWishlist((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
-  const cartCount = useMemo(() => cart.reduce((s,i) => s + i.qty, 0), [cart])
+  const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart])
 
   const shared = { addToCart, toggleWishlist, wishlist }
 
   return (
     <div className="app">
       <Seo />
-      <Header user={user} {...shared} cartCount={cartCount} wishlistCount={wishlist.length} query={query} setQuery={setQuery}/>
+      <Header
+        user={user}
+        {...shared}
+        cartCount={cartCount}
+        wishlistCount={wishlist.length}
+        query={query}
+        setQuery={setQuery}
+      />
       <Routes>
         <Route path="/" element={<Home {...shared} />} />
         <Route path="/shop" element={<Shop query={query} {...shared} />} />
@@ -94,7 +130,10 @@ export default function App() {
         <Route path="/account" element={<Account />} />
         <Route path="/login" element={<Account />} />
         <Route path="/wishlist" element={<Wishlist {...shared} />} />
-        <Route path="/cart" element={<Cart cart={cart} updateQty={updateQty} removeFromCart={removeFromCart} />} />
+        <Route
+          path="/cart"
+          element={<Cart cart={cart} updateQty={updateQty} removeFromCart={removeFromCart} />}
+        />
         <Route path="/checkout" element={<Checkout cart={cart} clearCart={() => setCart([])} />} />
         <Route path="/order-confirmation" element={<OrderConfirmation />} />
         <Route path="/offers" element={<Offers />} />

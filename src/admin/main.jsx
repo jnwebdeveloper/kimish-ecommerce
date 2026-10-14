@@ -24,9 +24,11 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div style={{padding: 32, fontFamily: 'system-ui', color: '#222'}}>
+        <div style={{ padding: 32, fontFamily: 'system-ui', color: '#222' }}>
           <h1>Kimish admin could not start</h1>
-          <pre style={{whiteSpace:'pre-wrap', background:'#f5f5f5', padding:16, borderRadius:12}}>
+          <pre
+            style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 16, borderRadius: 12 }}
+          >
             {String(this.state.error?.stack || this.state.error)}
           </pre>
         </div>
@@ -45,5 +47,5 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </BrowserRouter>
-  </ErrorBoundary>
+  </ErrorBoundary>,
 )

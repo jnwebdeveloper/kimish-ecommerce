@@ -1,6 +1,7 @@
 # Kimish payments, shipping and database
 
 ## Razorpay
+
 1. Create Razorpay Test Mode API keys.
 2. Add `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and a webhook secret to `.env`.
 3. Configure the Razorpay webhook URL as `https://YOUR-DOMAIN/api/webhooks/razorpay` and use the same webhook secret.
@@ -8,6 +9,7 @@
 5. Checkout creates a Razorpay Order on the server. Successful checkout is signature-verified and the payment is fetched from Razorpay before the Kimish order is marked Paid.
 
 ## Shiprocket
+
 1. In Shiprocket Settings > API create a dedicated API user (not your normal account login).
 2. Add `SHIPROCKET_EMAIL` and `SHIPROCKET_PASSWORD` to `.env`, then in Admin > Site Settings choose the pickup address from the "Shiprocket pickup address" dropdown (loaded from your Shiprocket account's Pickup Addresses).
 3. Configure a shipment webhook to `https://YOUR-DOMAIN/api/webhooks/shiprocket`. If using a custom secret header, set the same value as `SHIPROCKET_WEBHOOK_SECRET`.
@@ -17,6 +19,7 @@
 7. The `shipping_methods` site setting controls which checkout shipping options appear (comma-separated: `shiprocket,none,inhouse`; default all three). Only `shiprocket` orders are booked with Shiprocket; `inhouse` uses the `shipping_fee`/`free_shipping_threshold` settings and `none` charges nothing.
 
 ## Database
+
 Run `npm run db:setup` after changing `.env`. It creates/migrates PostgreSQL and seeds storefront content.
 
 Core commerce tables: `categories`, `products`, `variants`, `product_images`, `customers`, `addresses`, `orders`, `order_items`, `payments`, `shipments`, `coupons`, `reviews`.

@@ -6,58 +6,1149 @@ import { randomBytes, createHash, createHmac, timingSafeEqual } from 'node:crypt
 import { createPool } from './db.js'
 import { passwordHash, passwordValid } from './password.js'
 import { modules, validate } from './modules.js'
-const hash=v=>createHash('sha256').update(v).digest('hex')
-const cookieJar=req=>Object.fromEntries((req.headers.cookie||'').split(';').map(s=>s.trim().split('=')))
+const hash = (v) => createHash('sha256').update(v).digest('hex')
+const cookieJar = (req) =>
+  Object.fromEntries((req.headers.cookie || '').split(';').map((s) => s.trim().split('=')))
 export function createApi(env) {
- const api=express(),pool=createPool(env),attempts=new Map(),origin=env.AUTH_ORIGIN||'http://localhost:5173'
- api.disable('x-powered-by');api.use((_req,res,next)=>{res.set({'X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin','X-Frame-Options':'DENY','Permissions-Policy':'camera=(), microphone=(), geolocation=()'});next()});api.use(express.json({limit:'100kb',verify:(req,_res,buf)=>{req.rawBody=buf}}));api.use('/api',(_req,res,next)=>{res.set('Cache-Control','no-store');next()})
- api.use('/api',(req,res,next)=>{if(req.path.startsWith('/webhooks/'))return next();if(!['GET','HEAD'].includes(req.method)&&req.headers.origin!==origin)return res.status(403).json({message:'Request origin is not allowed.'});next()})
- const sessionCookie=(value,age)=>`kimish_admin=${value}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`
- const canManageAdmins=req=>Boolean(env.PRIMARY_ADMIN_EMAIL)&&req.admin.email.toLowerCase()===env.PRIMARY_ADMIN_EMAIL.toLowerCase();
- const guardSensitive=(req,res,next)=>{if(['admins','audit'].includes(req.params.module)&&!canManageAdmins(req))return res.status(403).json({message:'Only the primary administrator can manage administrators or view security logs.'});next()};
- const audit=async(client,req,action,module,id)=>client.query('INSERT INTO audit_logs(admin_id,action,module,record_id) VALUES($1,$2,$3,$4)',[req.admin.id,action,module,String(id)])
- api.get('/api/health',async(_req,res)=>{await pool.query('SELECT 1');res.json({database:'connected'})})
- api.post('/api/admin/login',async(req,res)=>{const ip=req.socket.remoteAddress;const previous=attempts.get(ip);const attempt=previous&&previous.until>Date.now()?previous:{count:0,until:Date.now()+900000};if(attempt.count>=8)return res.status(429).json({message:'Too many attempts. Try again in 15 minutes.'});attempt.count++;attempts.set(ip,attempt);const {rows}=await pool.query('SELECT * FROM admins WHERE lower(email)=lower($1)',[String(req.body.email||'')]);if(!rows[0]||!passwordValid(String(req.body.password||''),rows[0].password_hash))return res.status(401).json({message:'Incorrect email or password.'});attempts.delete(ip);const token=randomBytes(32).toString('hex');await pool.query('INSERT INTO admin_sessions(token_hash,admin_id,expires_at) VALUES($1,$2,now()+interval \'8 hours\')',[hash(token),rows[0].id]);res.set('Set-Cookie',sessionCookie(token,28800));res.json({admin:{id:rows[0].id,name:rows[0].name,email:rows[0].email}})})
- api.post('/api/admin/forgot-password',async(req,res)=>{const email=String(req.body?.email||'').trim().toLowerCase();const ip=req.socket.remoteAddress;const key='reset:'+ip;const entry=attempts.get(key)||{count:0,until:Date.now()+3600000};if(entry.until<Date.now()){entry.count=0;entry.until=Date.now()+3600000}entry.count++;attempts.set(key,entry);if(entry.count>5)return res.status(429).json({message:'Too many requests. Try again later.'});const generic={message:'If this email is registered, a password reset link will be sent.'};if(!env.RESEND_API_KEY||!env.PASSWORD_RESET_FROM||!env.PUBLIC_SITE_URL)return res.status(503).json({message:'Password recovery email is not configured.'});if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return res.json(generic);const admin=(await pool.query('SELECT id,email FROM admins WHERE lower(email)=$1',[email])).rows[0];if(admin){const token=randomBytes(32).toString('hex');await pool.query("INSERT INTO admin_password_resets(admin_id,token_hash,expires_at) VALUES($1,$2,now()+interval '20 minutes')",[admin.id,hash(token)]);const link=new URL('/admin/reset-password',env.PUBLIC_SITE_URL);link.searchParams.set('token',token);const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:env.PASSWORD_RESET_FROM,to:[admin.email],subject:'Reset your Kimish admin password',text:`Reset your password using this single-use link (expires in 20 minutes): ${link}`})});if(!response.ok){console.error('Password reset email delivery failed:',response.status);return res.status(503).json({message:'Password recovery email could not be sent. Please retry later.'})}}res.json(generic)})
- api.post('/api/admin/reset-password',async(req,res)=>{const token=String(req.body?.token||''),password=req.body?.password;if(!/^[a-f0-9]{64}$/.test(token)||typeof password!=='string'||password.length<12||password.length>128)return res.status(400).json({message:'Invalid reset token or password (12–128 characters required).'});const c=await pool.connect();try{await c.query('BEGIN');const row=(await c.query('SELECT admin_id FROM admin_password_resets WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now() FOR UPDATE',[hash(token)])).rows[0];if(!row){await c.query('ROLLBACK');return res.status(400).json({message:'Reset link is invalid or expired.'})}await c.query('UPDATE admins SET password_hash=$1 WHERE id=$2',[passwordHash(password),row.admin_id]);await c.query('UPDATE admin_password_resets SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL',[row.admin_id]);await c.query('DELETE FROM admin_sessions WHERE admin_id=$1',[row.admin_id]);await c.query('COMMIT');res.json({message:'Password updated. Sign in again.'})}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}})
- api.use('/api/admin',async(req,res,next)=>{const token=cookieJar(req).kimish_admin;if(!token)return res.status(401).json({message:'Please sign in as an administrator.'});const {rows}=await pool.query('SELECT a.id,a.name,a.email FROM admin_sessions s JOIN admins a ON a.id=s.admin_id WHERE s.token_hash=$1 AND s.expires_at>now()',[hash(token)]);if(!rows[0])return res.status(401).json({message:'Session expired. Please sign in again.'});req.admin=rows[0];next()})
- api.get('/api/admin/session',(req,res)=>res.json({admin:req.admin}))
- api.post('/api/admin/change-password',async(req,res)=>{const {currentPassword,newPassword}=req.body||{};if(typeof newPassword!=='string'||newPassword.length<12||newPassword.length>128)return res.status(400).json({message:'New password must contain 12–128 characters.'});const user=(await pool.query('SELECT password_hash FROM admins WHERE id=$1',[req.admin.id])).rows[0];if(!passwordValid(String(currentPassword||''),user.password_hash))return res.status(400).json({message:'Current password is incorrect.'});if(currentPassword===newPassword)return res.status(400).json({message:'Choose a different password.'});await pool.query('UPDATE admins SET password_hash=$1 WHERE id=$2',[passwordHash(newPassword),req.admin.id]);await pool.query('DELETE FROM admin_sessions WHERE admin_id=$1',[req.admin.id]);res.set('Set-Cookie',sessionCookie('',0));res.json({message:'Password changed. Please sign in again.'})})
+  const api = express(),
+    pool = createPool(env),
+    attempts = new Map(),
+    origin = env.AUTH_ORIGIN || 'http://localhost:5173'
+  api.disable('x-powered-by')
+  api.use((_req, res, next) => {
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'X-Frame-Options': 'DENY',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    })
+    next()
+  })
+  api.use(
+    express.json({
+      limit: '100kb',
+      verify: (req, _res, buf) => {
+        req.rawBody = buf
+      },
+    }),
+  )
+  api.use('/api', (_req, res, next) => {
+    res.set('Cache-Control', 'no-store')
+    next()
+  })
+  api.use('/api', (req, res, next) => {
+    if (req.path.startsWith('/webhooks/')) return next()
+    if (!['GET', 'HEAD'].includes(req.method) && req.headers.origin !== origin)
+      return res.status(403).json({ message: 'Request origin is not allowed.' })
+    next()
+  })
+  const sessionCookie = (value, age) =>
+    `kimish_admin=${value}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${age}${origin.startsWith('https:') ? '; Secure' : ''}`
+  const canManageAdmins = (req) =>
+    Boolean(env.PRIMARY_ADMIN_EMAIL) &&
+    req.admin.email.toLowerCase() === env.PRIMARY_ADMIN_EMAIL.toLowerCase()
+  const guardSensitive = (req, res, next) => {
+    if (['admins', 'audit'].includes(req.params.module) && !canManageAdmins(req))
+      return res.status(403).json({
+        message: 'Only the primary administrator can manage administrators or view security logs.',
+      })
+    next()
+  }
+  const audit = async (client, req, action, module, id) =>
+    client.query('INSERT INTO audit_logs(admin_id,action,module,record_id) VALUES($1,$2,$3,$4)', [
+      req.admin.id,
+      action,
+      module,
+      String(id),
+    ])
+  api.get('/api/health', async (_req, res) => {
+    await pool.query('SELECT 1')
+    res.json({ database: 'connected' })
+  })
+  api.post('/api/admin/login', async (req, res) => {
+    const ip = req.socket.remoteAddress
+    const previous = attempts.get(ip)
+    const attempt =
+      previous && previous.until > Date.now() ? previous : { count: 0, until: Date.now() + 900000 }
+    if (attempt.count >= 8)
+      return res.status(429).json({ message: 'Too many attempts. Try again in 15 minutes.' })
+    attempt.count++
+    attempts.set(ip, attempt)
+    const { rows } = await pool.query('SELECT * FROM admins WHERE lower(email)=lower($1)', [
+      String(req.body.email || ''),
+    ])
+    if (!rows[0] || !passwordValid(String(req.body.password || ''), rows[0].password_hash))
+      return res.status(401).json({ message: 'Incorrect email or password.' })
+    attempts.delete(ip)
+    const token = randomBytes(32).toString('hex')
+    await pool.query(
+      "INSERT INTO admin_sessions(token_hash,admin_id,expires_at) VALUES($1,$2,now()+interval '8 hours')",
+      [hash(token), rows[0].id],
+    )
+    res.set('Set-Cookie', sessionCookie(token, 28800))
+    res.json({ admin: { id: rows[0].id, name: rows[0].name, email: rows[0].email } })
+  })
+  api.post('/api/admin/forgot-password', async (req, res) => {
+    const email = String(req.body?.email || '')
+      .trim()
+      .toLowerCase()
+    const ip = req.socket.remoteAddress
+    const key = 'reset:' + ip
+    const entry = attempts.get(key) || { count: 0, until: Date.now() + 3600000 }
+    if (entry.until < Date.now()) {
+      entry.count = 0
+      entry.until = Date.now() + 3600000
+    }
+    entry.count++
+    attempts.set(key, entry)
+    if (entry.count > 5)
+      return res.status(429).json({ message: 'Too many requests. Try again later.' })
+    const generic = { message: 'If this email is registered, a password reset link will be sent.' }
+    if (!env.RESEND_API_KEY || !env.PASSWORD_RESET_FROM || !env.PUBLIC_SITE_URL)
+      return res.status(503).json({ message: 'Password recovery email is not configured.' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.json(generic)
+    const admin = (await pool.query('SELECT id,email FROM admins WHERE lower(email)=$1', [email]))
+      .rows[0]
+    if (admin) {
+      const token = randomBytes(32).toString('hex')
+      await pool.query(
+        "INSERT INTO admin_password_resets(admin_id,token_hash,expires_at) VALUES($1,$2,now()+interval '20 minutes')",
+        [admin.id, hash(token)],
+      )
+      const link = new URL('/admin/reset-password', env.PUBLIC_SITE_URL)
+      link.searchParams.set('token', token)
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: env.PASSWORD_RESET_FROM,
+          to: [admin.email],
+          subject: 'Reset your Kimish admin password',
+          text: `Reset your password using this single-use link (expires in 20 minutes): ${link}`,
+        }),
+      })
+      if (!response.ok) {
+        console.error('Password reset email delivery failed:', response.status)
+        return res
+          .status(503)
+          .json({ message: 'Password recovery email could not be sent. Please retry later.' })
+      }
+    }
+    res.json(generic)
+  })
+  api.post('/api/admin/reset-password', async (req, res) => {
+    const token = String(req.body?.token || ''),
+      password = req.body?.password
+    if (
+      !/^[a-f0-9]{64}$/.test(token) ||
+      typeof password !== 'string' ||
+      password.length < 12 ||
+      password.length > 128
+    )
+      return res
+        .status(400)
+        .json({ message: 'Invalid reset token or password (12–128 characters required).' })
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      const row = (
+        await c.query(
+          'SELECT admin_id FROM admin_password_resets WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now() FOR UPDATE',
+          [hash(token)],
+        )
+      ).rows[0]
+      if (!row) {
+        await c.query('ROLLBACK')
+        return res.status(400).json({ message: 'Reset link is invalid or expired.' })
+      }
+      await c.query('UPDATE admins SET password_hash=$1 WHERE id=$2', [
+        passwordHash(password),
+        row.admin_id,
+      ])
+      await c.query(
+        'UPDATE admin_password_resets SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL',
+        [row.admin_id],
+      )
+      await c.query('DELETE FROM admin_sessions WHERE admin_id=$1', [row.admin_id])
+      await c.query('COMMIT')
+      res.json({ message: 'Password updated. Sign in again.' })
+    } catch (e) {
+      await c.query('ROLLBACK')
+      throw e
+    } finally {
+      c.release()
+    }
+  })
+  api.use('/api/admin', async (req, res, next) => {
+    const token = cookieJar(req).kimish_admin
+    if (!token) return res.status(401).json({ message: 'Please sign in as an administrator.' })
+    const { rows } = await pool.query(
+      'SELECT a.id,a.name,a.email FROM admin_sessions s JOIN admins a ON a.id=s.admin_id WHERE s.token_hash=$1 AND s.expires_at>now()',
+      [hash(token)],
+    )
+    if (!rows[0]) return res.status(401).json({ message: 'Session expired. Please sign in again.' })
+    req.admin = rows[0]
+    next()
+  })
+  api.get('/api/admin/session', (req, res) => res.json({ admin: req.admin }))
+  api.post('/api/admin/change-password', async (req, res) => {
+    const { currentPassword, newPassword } = req.body || {}
+    if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 128)
+      return res.status(400).json({ message: 'New password must contain 12–128 characters.' })
+    const user = (await pool.query('SELECT password_hash FROM admins WHERE id=$1', [req.admin.id]))
+      .rows[0]
+    if (!passwordValid(String(currentPassword || ''), user.password_hash))
+      return res.status(400).json({ message: 'Current password is incorrect.' })
+    if (currentPassword === newPassword)
+      return res.status(400).json({ message: 'Choose a different password.' })
+    await pool.query('UPDATE admins SET password_hash=$1 WHERE id=$2', [
+      passwordHash(newPassword),
+      req.admin.id,
+    ])
+    await pool.query('DELETE FROM admin_sessions WHERE admin_id=$1', [req.admin.id])
+    res.set('Set-Cookie', sessionCookie('', 0))
+    res.json({ message: 'Password changed. Please sign in again.' })
+  })
 
- api.post('/api/admin/logout',async(req,res)=>{await pool.query('DELETE FROM admin_sessions WHERE token_hash=$1',[hash(cookieJar(req).kimish_admin)]);res.set('Set-Cookie',sessionCookie('',0));res.json({ok:true})})
- api.post('/api/admin/images/presign',async(req,res)=>{try{res.json(await presignImage(env,req.body||{}))}catch(e){res.status(e.status||500).json({message:e.status?e.message:'Could not prepare image upload.'})}})
- api.get('/api/admin/meta',(_req,res)=>res.json(modules))
- api.get('/api/admin/overview',async(_req,res)=>{const {rows}=await pool.query("SELECT (SELECT count(*) FROM products) products,(SELECT count(*) FROM orders) orders,(SELECT count(*) FROM customers) customers,(SELECT coalesce(sum(total),0) FROM orders WHERE payment_status='Paid' AND status!='Cancelled') revenue,(SELECT count(*) FROM variants WHERE stock<10) low_stock");res.json(rows[0])})
- api.get('/api/admin/audit',(req,res,next)=>canManageAdmins(req)?next():res.status(403).json({message:'Only the primary administrator may view audit logs.'}),async(_req,res)=>res.json((await pool.query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100')).rows))
- async function shiprocketPickups(){let token;try{token=await cachedShiprocketToken()}catch(e){throw Object.assign(new Error(`${e.message} Check SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD.`),{status:503})}const r=await fetch('https://apiv2.shiprocket.in/v1/external/settings/company/pickup',{headers:{Authorization:`Bearer ${token}`}});const d=await r.json().catch(()=>({}));if(r.status===401)shiprocketAuth=null;if(!r.ok)throw Object.assign(new Error('Could not load pickup addresses from Shiprocket.'),{status:502});return (d.data?.shipping_address||[]).map(a=>({location:String(a.pickup_location||''),address:[a.address,a.address_2].filter(Boolean).join(', '),city:String(a.city||''),state:String(a.state||''),pincode:String(a.pin_code||'')})).filter(a=>a.location&&/^\d{6}$/.test(a.pincode))}
- api.get('/api/admin/shiprocket/pickups',async(_req,res)=>{const settings=await loadSettings(pool);res.json({selected:settings.shiprocket_pickup_location||'',addresses:await shiprocketPickups()})})
- api.post('/api/admin/shiprocket/pickups',async(req,res)=>{const pickup=(await shiprocketPickups()).find(a=>a.location===String(req.body?.location||''));if(!pickup)return res.status(400).json({message:'Choose one of your Shiprocket pickup addresses.'});const c=await pool.connect();try{await c.query('BEGIN');for(const [key,value,description] of [['shiprocket_pickup_location',pickup.location,'Shiprocket pickup address nickname (set from the Shiprocket pickup panel)'],['shiprocket_pickup_pincode',pickup.pincode,'PIN code of the Shiprocket pickup address, used for rate estimates']])await c.query('INSERT INTO settings(key,value,description) VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[key,value,description]);await audit(c,req,'update','settings','shiprocket_pickup');await c.query('COMMIT')}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}res.json({selected:pickup.location})})
- api.get('/api/admin/:module',guardSensitive,async(req,res)=>{const m=req.params.module;if(!modules[m])return res.sendStatus(404);const cols=m==='admins'?'id,name,email,created_at':'*';const rows=(await pool.query(`SELECT ${cols} FROM ${m} ORDER BY id DESC LIMIT 1000`)).rows;if(m==='orders'){const items=(await pool.query('SELECT * FROM order_items WHERE order_id=ANY($1::int[]) ORDER BY id',[rows.map(r=>r.id)])).rows,byOrder=new Map(rows.map(r=>[r.id,[]]));for(const item of items)byOrder.get(item.order_id)?.push(item);for(const row of rows)row.items=byOrder.get(row.id)};res.json(rows)})
- async function save(req,res){const m=req.params.module;if(!modules[m]||m==='orders')return res.status(400).json({message:'Use the order form to create orders.'});let body={...req.body};if(modules[m].fields.some(f=>f.name==='slug')&&!body.slug){if(req.params.id){const existing=(await pool.query(`SELECT slug FROM ${m} WHERE id=$1`,[req.params.id])).rows[0];if(!existing)return res.sendStatus(404);body.slug=existing.slug}else{body.slug=automaticSlug(body.name||body.title)}}let values;try{values=validate(m,body,!req.params.id)}catch(e){return res.status(400).json({message:e.message})}if(m==='categories'&&values.group_id){const g=(await pool.query('SELECT name FROM category_groups WHERE id=$1 AND active=true',[values.group_id])).rows[0];if(!g)return res.status(400).json({message:'Select a valid active category group.'});values.group_name=g.name}if(m==='categories'&&values.parent_id){if(Number(values.parent_id)===Number(req.params.id))return res.status(400).json({message:'A category cannot be its own parent.'});const chain=(await pool.query('WITH RECURSIVE ancestors AS (SELECT id,parent_id,1 AS depth FROM categories WHERE id=$1 UNION ALL SELECT c.id,c.parent_id,a.depth+1 FROM categories c JOIN ancestors a ON c.id=a.parent_id WHERE a.depth<4) SELECT id,depth FROM ancestors',[values.parent_id])).rows;if(!chain.length)return res.status(400).json({message:'Select an existing parent category.'});if(chain.some(r=>Number(r.id)===Number(req.params.id)))return res.status(400).json({message:'A category cannot be moved beneath one of its descendants.'});if(chain.length>=3)return res.status(400).json({message:'Only three category levels are supported.'});const depth=(await pool.query('WITH RECURSIVE descendants AS (SELECT id,1 AS depth FROM categories WHERE id=$1 UNION ALL SELECT c.id,d.depth+1 FROM categories c JOIN descendants d ON c.parent_id=d.id WHERE d.depth<4) SELECT max(depth) AS depth FROM descendants',[req.params.id||0])).rows[0]?.depth||1;if(chain.length+Number(depth)>3)return res.status(400).json({message:'This change would exceed the three-level category limit.'})}if(m==='admins'){if(values.password){values.password_hash=passwordHash(values.password);delete values.password}}const client=await pool.connect();try{await client.query('BEGIN');const keys=Object.keys(values);let row;if(req.params.id){row=(await client.query(`UPDATE ${m} SET ${keys.map((k,i)=>`${k}=$${i+1}`).join(',')} WHERE id=$${keys.length+1} RETURNING id`,[...Object.values(values),req.params.id])).rows[0]}else row=(await client.query(`INSERT INTO ${m}(${keys.join(',')}) VALUES(${keys.map((_,i)=>`$${i+1}`).join(',')}) RETURNING id`,Object.values(values))).rows[0];if(!row){await client.query('ROLLBACK');return res.sendStatus(404)}if(m==='admins'&&values.password_hash)await client.query('DELETE FROM admin_sessions WHERE admin_id=$1',[row.id]);await audit(client,req,req.params.id?'update':'create',m,row.id);await client.query('COMMIT');res.json(row)}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}}
- api.post('/api/admin/:module',guardSensitive,save)
- api.put('/api/admin/orders/:id',async(req,res)=>{let v;try{v=validate('orders',req.body,false)}catch(e){return res.status(400).json({message:e.message})}const c=await pool.connect();try{await c.query('BEGIN');const old=(await c.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE',[req.params.id])).rows[0];if(!old){await c.query('ROLLBACK');return res.sendStatus(404)}if(old.status==='Cancelled'&&v.status!=='Cancelled'){await c.query('ROLLBACK');return res.status(400).json({message:'Cancelled orders cannot be reopened. Create a new order.'})}if(v.status==='Cancelled'&&old.status!=='Cancelled')await c.query('UPDATE variants v SET stock=stock+i.quantity FROM order_items i WHERE i.variant_id=v.id AND i.order_id=$1',[old.id]);await c.query('UPDATE orders SET status=$1,payment_status=$2,tracking_number=$3,notes=$4 WHERE id=$5',[v.status,v.payment_status,v.tracking_number,v.notes,old.id]);await audit(c,req,'update','orders',old.id);await c.query('COMMIT');res.json({id:old.id})}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}})
- api.put('/api/admin/:module/:id',guardSensitive,save)
- api.delete('/api/admin/:module/:id',guardSensitive,async(req,res)=>{const m=req.params.module,id=Number(req.params.id);if(!modules[m])return res.sendStatus(404);if(m==='admins'&&id===req.admin.id)return res.status(400).json({message:'You cannot delete your own administrator account.'});const c=await pool.connect();try{await c.query('BEGIN');if(m==='orders'){const row=(await c.query('SELECT status FROM orders WHERE id=$1 FOR UPDATE',[id])).rows[0];if(row&&!['Cancelled','Delivered'].includes(row.status))await c.query('UPDATE variants v SET stock=stock+i.quantity FROM order_items i WHERE i.variant_id=v.id AND i.order_id=$1',[id])}const result=await c.query(`DELETE FROM ${m} WHERE id=$1`,[id]);if(!result.rowCount){await c.query('ROLLBACK');return res.sendStatus(404)}await audit(c,req,'delete',m,id);await c.query('COMMIT');res.json({ok:true})}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}})
- api.get('/api/store',async(_req,res)=>{const products=(await pool.query("SELECT p.*,c.name category,coalesce((SELECT avg(r.rating) FROM reviews r WHERE r.product_id=p.id AND r.approved),0) rating,(SELECT count(*) FROM reviews r WHERE r.product_id=p.id AND r.approved) reviews FROM products p JOIN categories c ON c.id=p.category_id WHERE p.active AND c.active ORDER BY p.id")).rows;const variants=(await pool.query('SELECT * FROM variants ORDER BY price,id')).rows;const images=(await pool.query('SELECT * FROM product_images ORDER BY sort_order,id')).rows;const result={products:products.map(p=>({...p,isNew:p.is_new,rating:Number(p.rating).toFixed(1),reviews:Number(p.reviews),images:[p.image,...images.filter(i=>i.product_id===p.id).map(i=>i.image)].filter(Boolean),variants:variants.filter(v=>v.product_id===p.id).map(v=>({...v,price:Number(v.price),mrp:Number(v.mrp)}))})).filter(p=>p.variants.length)};result.categories=(await pool.query("SELECT c.*,coalesce(g.name,c.group_name) group_name FROM categories c LEFT JOIN category_groups g ON g.id=c.group_id WHERE c.active=true ORDER BY c.id")).rows;for(const m of ['coupons','banners','pages','navigation','content_sections','gift_boxes'])result[m]=(await pool.query(`SELECT * FROM ${m} WHERE active=true ORDER BY id`)).rows;result.reviews=(await pool.query('SELECT id,product_id,customer_name,rating,content FROM reviews WHERE approved=true ORDER BY id DESC')).rows;result.settings=Object.fromEntries((await pool.query("SELECT key,value FROM settings WHERE key NOT LIKE 'shiprocket\\_%'")).rows.map(r=>[r.key,r.value]));res.json(result)})
- async function createOrder(req,res){const body=req.body,cust=body.customer||{},items=body.items;const deliveryErrors=validateDelivery(cust);if(Object.keys(deliveryErrors).length)return res.status(400).json({message:'Please correct the delivery information.',fields:deliveryErrors});if(!cust.name||!/^\d{10}$/.test(cust.mobile)||!/^\d{6}$/.test(cust.pincode)||!cust.address||!cust.city||!cust.state||!Array.isArray(items)||!items.length||items.length>100)return res.status(400).json({message:'Complete the delivery information and add products.'});if(!['cod','razorpay'].includes(body.payment))return res.status(400).json({message:'Choose Cash on Delivery or Razorpay.'});if(body.payment==='razorpay'&&(!env.RAZORPAY_KEY_ID||!env.RAZORPAY_KEY_SECRET))return res.status(503).json({message:'Online payment is temporarily unavailable.'});const method=body.shippingMethod;let quote=null;if(method!==undefined){const shippingSettings=await loadSettings(pool);if(!shippingMethods(shippingSettings).includes(method))return res.status(400).json({message:'Choose an available shipping method.'});if(method==='shiprocket'){const couriers=await shiprocketRates(cust.pincode,await cartWeight(items),body.payment==='cod',shippingSettings);quote=couriers.find(x=>x.id===String(body.courierId||''));if(!quote)return res.status(400).json({message:'The selected courier is not available for this PIN code. Check shipping rates again.'});if(Number(body.shippingQuote)!==quote.rate)return res.status(409).json({message:`The shipping rate is now ₹${quote.rate}. Check shipping rates again before placing your order.`})}}const c=await pool.connect();try{await c.query('BEGIN');let subtotal=0;const saved=[];const combined=new Map();for(const i of items){const id=Number(i.variantId||i.variant?.id),qty=Number(i.qty);if(!Number.isInteger(id)||!Number.isInteger(qty)||qty<1||qty>100)throw Object.assign(new Error('Invalid item quantity.'),{status:400});combined.set(id,(combined.get(id)||0)+qty)}for(const [id,qty] of [...combined].sort((a,b)=>a[0]-b[0])){const v=(await c.query('SELECT v.*,p.name,p.image,p.slug,p.active FROM variants v JOIN products p ON p.id=v.product_id WHERE v.id=$1 FOR UPDATE OF v',[id])).rows[0];if(!v||!v.active||v.stock<qty)throw Object.assign(new Error('An item is unavailable or has insufficient stock.'),{status:400});await c.query('UPDATE variants SET stock=stock-$1 WHERE id=$2 AND stock >= $1',[qty,id]);subtotal+=Number(v.price)*qty;saved.push({v,qty})}const settings=Object.fromEntries((await c.query('SELECT key,value FROM settings')).rows.map(r=>[r.key,r.value]));let discount=0;const couponCode=String(body.couponCode||'').toUpperCase();if(couponCode){const coupon=(await c.query('SELECT * FROM coupons WHERE code=$1 AND active=true',[couponCode])).rows[0];if(!coupon||subtotal<Number(coupon.min_cart))throw Object.assign(new Error('Coupon is invalid or the minimum order has not been reached.'),{status:400});discount=coupon.type==='percent'?Math.round(subtotal*Number(coupon.value))/100:Number(coupon.value);discount=Math.min(discount,subtotal)}const shipping=method==='none'?0:quote?quote.rate:subtotal>=Number(settings.free_shipping_threshold||499)?0:Number(settings.shipping_fee||79);const total=Math.max(0,subtotal-discount+shipping);const customer=(await c.query('INSERT INTO customers(name,phone,email) VALUES($1,$2,$3) ON CONFLICT(phone) DO UPDATE SET name=EXCLUDED.name,email=EXCLUDED.email RETURNING id',[cust.name,'+91'+cust.mobile,cust.email||''])).rows[0];await c.query('INSERT INTO addresses(customer_id,address,landmark,city,state,pincode) VALUES($1,$2,$3,$4,$5,$6)',[customer.id,cust.address,cust.landmark||'',cust.city,cust.state,cust.pincode]);const number=`KIM${Date.now()}${randomBytes(2).toString('hex').toUpperCase()}`;const order=(await c.query('INSERT INTO orders(order_number,customer_id,payment,subtotal,discount,shipping,total,customer_snapshot,coupon_code) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[number,customer.id,body.payment,subtotal,discount,shipping,total,JSON.stringify(cust),couponCode||null])).rows[0];for(const {v,qty} of saved)await c.query('INSERT INTO order_items(order_id,product_id,variant_id,product_name,weight,price,quantity) VALUES($1,$2,$3,$4,$5,$6,$7)',[order.id,v.product_id,v.id,v.name,v.weight,v.price,qty]);let razorpay=null;if(body.payment==='razorpay'){const auth=Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64');const rr=await fetch('https://api.razorpay.com/v1/orders',{method:'POST',headers:{Authorization:`Basic ${auth}`,'Content-Type':'application/json'},body:JSON.stringify({amount:Math.round(total*100),currency:'INR',receipt:number,notes:{kimish_order_id:String(order.id),order_number:number}})});const data=await rr.json();if(!rr.ok)throw Object.assign(new Error('Unable to start Razorpay payment.'),{status:502});await c.query('INSERT INTO payments(order_id,provider_order_id,amount,status,raw_response) VALUES($1,$2,$3,$4,$5)',[order.id,data.id,total,'created',data]);razorpay={keyId:env.RAZORPAY_KEY_ID,orderId:data.id,amount:data.amount,currency:data.currency,name:'Kimish',description:`Order ${number}`}}else await c.query("INSERT INTO payments(order_id,amount,status,method) VALUES($1,$2,'created','cod')",[order.id,total]);await c.query("INSERT INTO shipments(order_id,provider,courier_name,status) VALUES($1,$2,$3,'pending') ON CONFLICT(order_id) DO NOTHING",[order.id,method==='none'||method==='inhouse'?method:'shiprocket',quote?.name||'']);if(req.admin)await audit(c,req,'create','orders',order.id);await c.query('COMMIT');const response={id:number,dbId:order.id,customer:cust,payment:body.payment,shippingMethod:method||'shiprocket',courier:quote?.name||'',subtotal,discount,shipping,total,status:'Confirmed',razorpay,items:saved.map(({v,qty})=>({product:{id:v.product_id,name:v.name,images:[v.image]},variant:{id:v.id,weight:v.weight,price:Number(v.price)},qty}))};if(body.payment==='cod')syncShiprocket(order.id).catch(()=>{});res.status(201).json(response)}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
- async function shiprocketToken(){if(!env.SHIPROCKET_EMAIL||!env.SHIPROCKET_PASSWORD)throw new Error('Shiprocket credentials are not configured.');const r=await fetch('https://apiv2.shiprocket.in/v1/external/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:env.SHIPROCKET_EMAIL,password:env.SHIPROCKET_PASSWORD})});const d=await r.json();if(!r.ok||!d.token)throw new Error('Shiprocket authentication failed.');return d.token}
- let shiprocketAuth=null
- async function cachedShiprocketToken(){if(shiprocketAuth&&shiprocketAuth.until>Date.now())return shiprocketAuth.token;const token=await shiprocketToken();shiprocketAuth={token,until:Date.now()+8*864e5};return token}
- const shippingMethods=settings=>{const list=String(settings.shipping_methods||'shiprocket,none,inhouse').split(',').map(m=>m.trim()).filter(m=>['shiprocket','none','inhouse'].includes(m));return list.length?list:['inhouse']}
- const loadSettings=async db=>Object.fromEntries((await db.query('SELECT key,value FROM settings')).rows.map(r=>[r.key,r.value]))
- async function cartWeight(items){const qty=new Map();for(const i of items){const id=Number(i.variantId||i.variant?.id),q=Number(i.qty);if(!Number.isInteger(id)||!Number.isInteger(q)||q<1||q>100)throw Object.assign(new Error('Invalid item quantity.'),{status:400});qty.set(id,(qty.get(id)||0)+q)}const rows=(await pool.query('SELECT id,weight_kg FROM variants WHERE id=ANY($1::int[])',[[...qty.keys()]])).rows;if(rows.length!==qty.size)throw Object.assign(new Error('An item is unavailable.'),{status:400});return Math.max(0.5,Math.round(rows.reduce((sum,v)=>sum+Number(v.weight_kg||0.5)*qty.get(v.id),0)*1000)/1000)}
- async function shiprocketRates(pincode,weight,cod,settings){const unavailable=reason=>{console.warn('Shiprocket rates unavailable:',reason);return Object.assign(new Error('Shiprocket rates are temporarily unavailable.'),{status:503})};if(!/^\d{6}$/.test(String(settings.shiprocket_pickup_pincode||'')))throw unavailable('No Shiprocket pickup address is selected in Admin > Site Settings.');let token;try{token=await cachedShiprocketToken()}catch(e){throw unavailable(e.message)}const q=new URLSearchParams({pickup_postcode:settings.shiprocket_pickup_pincode,delivery_postcode:pincode,weight:String(weight),cod:cod?'1':'0'});const r=await fetch(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${q}`,{headers:{Authorization:`Bearer ${token}`}});const d=await r.json().catch(()=>({}));if(r.status===401)shiprocketAuth=null;if(r.status===404)return [];if(!r.ok)throw Object.assign(new Error('Could not fetch Shiprocket rates. Please try again.'),{status:502});return (d.data?.available_courier_companies||[]).map(x=>({id:String(x.courier_company_id),name:String(x.courier_name||'Courier'),rate:Math.round(Number(x.rate??x.freight_charge)*100)/100,etd:String(x.etd||''),days:String(x.estimated_delivery_days||'')})).filter(x=>Number.isFinite(x.rate)&&x.rate>=0).sort((a,b)=>a.rate-b.rate)}
- async function syncShiprocket(orderId){const c=await pool.connect();try{const order=(await c.query('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0];if(!order)return;const existing=(await c.query('SELECT * FROM shipments WHERE order_id=$1',[orderId])).rows[0];if(existing?.provider_order_id||(existing&&existing.provider!=='shiprocket'))return;const items=(await c.query('SELECT oi.*,v.weight,v.weight_kg,v.length_cm,v.breadth_cm,v.height_cm FROM order_items oi LEFT JOIN variants v ON v.id=oi.variant_id WHERE oi.order_id=$1',[orderId])).rows;const cust=order.customer_snapshot;const token=await cachedShiprocketToken();const payload={order_id:order.order_number,order_date:new Date(order.created_at).toISOString().slice(0,19).replace('T',' '),pickup_location:(await loadSettings(c)).shiprocket_pickup_location||env.SHIPROCKET_PICKUP_LOCATION||'Primary',billing_customer_name:cust.name,billing_last_name:'',billing_address:cust.address,billing_address_2:cust.landmark||'',billing_city:cust.city,billing_pincode:cust.pincode,billing_state:cust.state,billing_country:'India',billing_email:cust.email||'orders@kimish.local',billing_phone:cust.mobile,shipping_is_billing:true,order_items:items.map(i=>({name:i.product_name,sku:`KIM-${i.variant_id||i.product_id}`,units:i.quantity,selling_price:Number(i.price)})),payment_method:order.payment==='cod'?'COD':'Prepaid',sub_total:Number(order.subtotal),length:Math.max(...items.map(i=>Number(i.length_cm||20))),breadth:Math.max(...items.map(i=>Number(i.breadth_cm||20))),height:Math.max(...items.map(i=>Number(i.height_cm||10))),weight:Math.max(0.5,items.reduce((sum,i)=>sum+Number(i.weight_kg||0.5)*Number(i.quantity),0))};const r=await fetch('https://apiv2.shiprocket.in/v1/external/orders/create/adhoc',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)throw new Error(d.message||'Shiprocket order creation failed.');await c.query("UPDATE shipments SET provider_order_id=$1,shipment_id=$2,status='created',raw_response=$3,updated_at=now() WHERE order_id=$4",[String(d.order_id||''),String(d.shipment_id||''),d,orderId])}catch(e){await c.query("UPDATE shipments SET status='failed',raw_response=jsonb_build_object('error',$1),updated_at=now() WHERE order_id=$2",[e.message,orderId]);throw e}finally{c.release()}}
- api.post('/api/payments/razorpay/verify',async(req,res)=>{const {orderNumber,razorpay_order_id,razorpay_payment_id,razorpay_signature}=req.body||{};const order=(await pool.query('SELECT * FROM orders WHERE order_number=$1',[orderNumber])).rows[0];if(!order)return res.status(404).json({message:'Order not found.'});const payment=(await pool.query('SELECT * FROM payments WHERE order_id=$1 AND provider_order_id=$2',[order.id,razorpay_order_id])).rows[0];if(!payment)return res.status(400).json({message:'Payment order mismatch.'});const expected=createHmac('sha256',env.RAZORPAY_KEY_SECRET).update(`${razorpay_order_id}|${razorpay_payment_id}`).digest('hex');const a=Buffer.from(expected),b=Buffer.from(String(razorpay_signature||''));if(a.length!==b.length||!timingSafeEqual(a,b))return res.status(400).json({message:'Payment verification failed.'});const auth=Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64');const pr=await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(razorpay_payment_id)}`,{headers:{Authorization:`Basic ${auth}`}});const pd=await pr.json();if(!pr.ok||pd.order_id!==razorpay_order_id||pd.status!=='captured'||Number(pd.amount)!==Math.round(Number(order.total)*100))return res.status(400).json({message:'Payment is not captured yet. Please retry verification shortly.'});await pool.query("UPDATE payments SET provider_payment_id=$1,status='captured',method=$2,raw_response=$3,updated_at=now() WHERE id=$4",[razorpay_payment_id,String(pd.method||''),pd,payment.id]);await pool.query("UPDATE orders SET payment_status='Paid' WHERE id=$1",[order.id]);syncShiprocket(order.id).catch(()=>{});res.json({ok:true,orderNumber:order.order_number})})
- api.post('/api/payments/razorpay/cancel',async(req,res)=>{const {orderNumber,razorpay_order_id}=req.body||{};if(!env.RAZORPAY_KEY_ID||!env.RAZORPAY_KEY_SECRET)return res.status(503).json({message:'Online payment is temporarily unavailable.'});if(!razorpay_order_id)return res.status(400).json({message:'Payment order is required.'});const auth=Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64');const pr=await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(String(razorpay_order_id))}/payments`,{headers:{Authorization:`Basic ${auth}`}});const pd=await pr.json();if(!pr.ok)return res.status(502).json({message:'Unable to confirm the payment status with Razorpay.'});if((pd.items||[]).some(p=>['authorized','captured'].includes(p.status)))return res.status(409).json({message:'A payment for this order is being processed. Please wait for confirmation.'});const c=await pool.connect();try{await c.query('BEGIN');const order=(await c.query("SELECT o.* FROM orders o JOIN payments p ON p.order_id=o.id WHERE o.order_number=$1 AND p.provider_order_id=$2 AND o.payment='razorpay' FOR UPDATE OF o",[String(orderNumber||''),String(razorpay_order_id)])).rows[0];if(!order){await c.query('ROLLBACK');return res.status(404).json({message:'Order not found.'})}if(order.payment_status!=='Unpaid'||order.status==='Cancelled'){await c.query('ROLLBACK');return res.json({ok:true,cancelled:false})}await c.query('UPDATE variants v SET stock=stock+i.quantity FROM order_items i WHERE i.variant_id=v.id AND i.order_id=$1',[order.id]);await c.query("UPDATE orders SET status='Cancelled',notes=trim(coalesce(notes,'')||' Online payment was not completed; stock restored.') WHERE id=$1",[order.id]);await c.query("UPDATE payments SET status='failed',updated_at=now() WHERE order_id=$1 AND status='created'",[order.id]);await c.query("UPDATE shipments SET status='cancelled',updated_at=now() WHERE order_id=$1 AND status='pending'",[order.id]);await c.query('COMMIT');res.json({ok:true,cancelled:true})}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}})
- api.post('/api/webhooks/razorpay',async(req,res)=>{if(!env.RAZORPAY_WEBHOOK_SECRET)return res.sendStatus(503);const sig=String(req.headers['x-razorpay-signature']||'');const expected=createHmac('sha256',env.RAZORPAY_WEBHOOK_SECRET).update(req.rawBody||Buffer.from('')).digest('hex');const a=Buffer.from(expected),b=Buffer.from(sig);if(a.length!==b.length||!timingSafeEqual(a,b))return res.sendStatus(401);const event=req.body||{};await pool.query('INSERT INTO integration_events(provider,event_type,external_id,payload,processed) VALUES($1,$2,$3,$4,true)',['razorpay',String(event.event||'unknown'),String(event.payload?.payment?.entity?.id||''),event]);const pay=event.payload?.payment?.entity;if(pay?.order_id){const status=pay.status==='captured'?'captured':pay.status==='failed'?'failed':'authorized';await pool.query('UPDATE payments SET provider_payment_id=coalesce($1,provider_payment_id),status=$2,raw_response=$3,updated_at=now() WHERE provider_order_id=$4',[pay.id||null,status,pay,pay.order_id]);if(status==='captured'){const row=(await pool.query("UPDATE orders o SET payment_status='Paid' FROM payments p WHERE p.order_id=o.id AND p.provider_order_id=$1 RETURNING o.id",[pay.order_id])).rows[0];if(row)syncShiprocket(row.id).catch(()=>{})}}res.json({ok:true})})
- api.post('/api/webhooks/shiprocket',async(req,res)=>{const secret=String(req.headers['x-api-key']||req.headers['x-shiprocket-token']||'');if(env.SHIPROCKET_WEBHOOK_SECRET&&secret!==env.SHIPROCKET_WEBHOOK_SECRET)return res.sendStatus(401);const body=req.body||{};await pool.query('INSERT INTO integration_events(provider,event_type,external_id,payload,processed) VALUES($1,$2,$3,$4,true)',['shiprocket',String(body.current_status||body.status||'update'),String(body.awb||body.awb_code||''),body]);const awb=String(body.awb||body.awb_code||'');if(awb)await pool.query("UPDATE shipments SET awb_code=$1,status=$2,courier_name=coalesce(nullif($3,''),courier_name),updated_at=now() WHERE awb_code=$1 OR shipment_id=$4",[awb,String(body.current_status||body.status||'updated'),String(body.courier_name||''),String(body.shipment_id||'')]);res.json({ok:true})})
- api.use(['/api/orders','/api/track','/api/shipping'],(req,res,next)=>{const key='public:'+req.socket.remoteAddress;const old=attempts.get(key);const value=old&&old.until>Date.now()?old:{count:0,until:Date.now()+60000};value.count++;attempts.set(key,value);if(value.count>20)return res.status(429).json({message:'Too many requests. Please try again shortly.'});next()})
- api.post('/api/orders',createOrder)
- api.post('/api/shipping/rates',async(req,res)=>{const {pincode,items,payment}=req.body||{};if(!/^\d{6}$/.test(String(pincode||'')))return res.status(400).json({message:'Enter a valid 6-digit PIN code first.'});if(!Array.isArray(items)||!items.length||items.length>100)return res.status(400).json({message:'Add products before checking shipping rates.'});const settings=await loadSettings(pool);if(!shippingMethods(settings).includes('shiprocket'))return res.status(400).json({message:'Shiprocket shipping is not available.'});const weight=await cartWeight(items);res.json({weight,couriers:await shiprocketRates(String(pincode),weight,payment==='cod',settings)})})
- // Special order creation route must precede generic /:module in the client URL.
- api.post('/api/admin/create/order',createOrder)
- api.post('/api/track',async(req,res)=>{const {rows}=await pool.query("SELECT order_number,status,tracking_number,created_at FROM orders WHERE order_number=$1 AND customer_snapshot->>'mobile'=$2",[String(req.body.orderId||''),String(req.body.mobile||'')]);if(!rows[0])return res.status(404).json({message:'No matching order found.'});res.json(rows[0])})
- api.use('/api',(err,_req,res,_next)=>{console.error('API error:',err.code||err.name);const conflict=['23505','23503','23514','22P02','23502'].includes(err.code);res.status(err.status|| (conflict?400:500)).json({message:err.status?err.message:conflict?'Check the fields. Values must be unique and valid; referenced records cannot be deleted.':'The database request failed. Please try again.'})})
- return {api,pool}
+  api.post('/api/admin/logout', async (req, res) => {
+    await pool.query('DELETE FROM admin_sessions WHERE token_hash=$1', [
+      hash(cookieJar(req).kimish_admin),
+    ])
+    res.set('Set-Cookie', sessionCookie('', 0))
+    res.json({ ok: true })
+  })
+  api.post('/api/admin/images/presign', async (req, res) => {
+    try {
+      res.json(await presignImage(env, req.body || {}))
+    } catch (e) {
+      res
+        .status(e.status || 500)
+        .json({ message: e.status ? e.message : 'Could not prepare image upload.' })
+    }
+  })
+  api.get('/api/admin/meta', (_req, res) => res.json(modules))
+  api.get('/api/admin/overview', async (_req, res) => {
+    const { rows } = await pool.query(
+      "SELECT (SELECT count(*) FROM products) products,(SELECT count(*) FROM orders) orders,(SELECT count(*) FROM customers) customers,(SELECT coalesce(sum(total),0) FROM orders WHERE payment_status='Paid' AND status!='Cancelled') revenue,(SELECT count(*) FROM variants WHERE stock<10) low_stock",
+    )
+    res.json(rows[0])
+  })
+  api.get(
+    '/api/admin/audit',
+    (req, res, next) =>
+      canManageAdmins(req)
+        ? next()
+        : res.status(403).json({ message: 'Only the primary administrator may view audit logs.' }),
+    async (_req, res) =>
+      res.json((await pool.query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100')).rows),
+  )
+  async function shiprocketPickups() {
+    let token
+    try {
+      token = await cachedShiprocketToken()
+    } catch (e) {
+      throw Object.assign(
+        new Error(`${e.message} Check SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD.`),
+        { status: 503 },
+      )
+    }
+    const r = await fetch('https://apiv2.shiprocket.in/v1/external/settings/company/pickup', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const d = await r.json().catch(() => ({}))
+    if (r.status === 401) shiprocketAuth = null
+    if (!r.ok)
+      throw Object.assign(new Error('Could not load pickup addresses from Shiprocket.'), {
+        status: 502,
+      })
+    return (d.data?.shipping_address || [])
+      .map((a) => ({
+        location: String(a.pickup_location || ''),
+        address: [a.address, a.address_2].filter(Boolean).join(', '),
+        city: String(a.city || ''),
+        state: String(a.state || ''),
+        pincode: String(a.pin_code || ''),
+      }))
+      .filter((a) => a.location && /^\d{6}$/.test(a.pincode))
+  }
+  api.get('/api/admin/shiprocket/pickups', async (_req, res) => {
+    const settings = await loadSettings(pool)
+    res.json({
+      selected: settings.shiprocket_pickup_location || '',
+      addresses: await shiprocketPickups(),
+    })
+  })
+  api.post('/api/admin/shiprocket/pickups', async (req, res) => {
+    const pickup = (await shiprocketPickups()).find(
+      (a) => a.location === String(req.body?.location || ''),
+    )
+    if (!pickup)
+      return res.status(400).json({ message: 'Choose one of your Shiprocket pickup addresses.' })
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      for (const [key, value, description] of [
+        [
+          'shiprocket_pickup_location',
+          pickup.location,
+          'Shiprocket pickup address nickname (set from the Shiprocket pickup panel)',
+        ],
+        [
+          'shiprocket_pickup_pincode',
+          pickup.pincode,
+          'PIN code of the Shiprocket pickup address, used for rate estimates',
+        ],
+      ])
+        await c.query(
+          'INSERT INTO settings(key,value,description) VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',
+          [key, value, description],
+        )
+      await audit(c, req, 'update', 'settings', 'shiprocket_pickup')
+      await c.query('COMMIT')
+    } catch (e) {
+      await c.query('ROLLBACK')
+      throw e
+    } finally {
+      c.release()
+    }
+    res.json({ selected: pickup.location })
+  })
+  api.get('/api/admin/:module', guardSensitive, async (req, res) => {
+    const m = req.params.module
+    if (!modules[m]) return res.sendStatus(404)
+    const cols = m === 'admins' ? 'id,name,email,created_at' : '*'
+    const rows = (await pool.query(`SELECT ${cols} FROM ${m} ORDER BY id DESC LIMIT 1000`)).rows
+    if (m === 'orders') {
+      const items = (
+          await pool.query('SELECT * FROM order_items WHERE order_id=ANY($1::int[]) ORDER BY id', [
+            rows.map((r) => r.id),
+          ])
+        ).rows,
+        byOrder = new Map(rows.map((r) => [r.id, []]))
+      for (const item of items) byOrder.get(item.order_id)?.push(item)
+      for (const row of rows) row.items = byOrder.get(row.id)
+    }
+    res.json(rows)
+  })
+  async function save(req, res) {
+    const m = req.params.module
+    if (!modules[m] || m === 'orders')
+      return res.status(400).json({ message: 'Use the order form to create orders.' })
+    let body = { ...req.body }
+    if (modules[m].fields.some((f) => f.name === 'slug') && !body.slug) {
+      if (req.params.id) {
+        const existing = (await pool.query(`SELECT slug FROM ${m} WHERE id=$1`, [req.params.id]))
+          .rows[0]
+        if (!existing) return res.sendStatus(404)
+        body.slug = existing.slug
+      } else {
+        body.slug = automaticSlug(body.name || body.title)
+      }
+    }
+    let values
+    try {
+      values = validate(m, body, !req.params.id)
+    } catch (e) {
+      return res.status(400).json({ message: e.message })
+    }
+    if (m === 'categories' && values.group_id) {
+      const g = (
+        await pool.query('SELECT name FROM category_groups WHERE id=$1 AND active=true', [
+          values.group_id,
+        ])
+      ).rows[0]
+      if (!g) return res.status(400).json({ message: 'Select a valid active category group.' })
+      values.group_name = g.name
+    }
+    if (m === 'categories' && values.parent_id) {
+      if (Number(values.parent_id) === Number(req.params.id))
+        return res.status(400).json({ message: 'A category cannot be its own parent.' })
+      const chain = (
+        await pool.query(
+          'WITH RECURSIVE ancestors AS (SELECT id,parent_id,1 AS depth FROM categories WHERE id=$1 UNION ALL SELECT c.id,c.parent_id,a.depth+1 FROM categories c JOIN ancestors a ON c.id=a.parent_id WHERE a.depth<4) SELECT id,depth FROM ancestors',
+          [values.parent_id],
+        )
+      ).rows
+      if (!chain.length)
+        return res.status(400).json({ message: 'Select an existing parent category.' })
+      if (chain.some((r) => Number(r.id) === Number(req.params.id)))
+        return res
+          .status(400)
+          .json({ message: 'A category cannot be moved beneath one of its descendants.' })
+      if (chain.length >= 3)
+        return res.status(400).json({ message: 'Only three category levels are supported.' })
+      const depth =
+        (
+          await pool.query(
+            'WITH RECURSIVE descendants AS (SELECT id,1 AS depth FROM categories WHERE id=$1 UNION ALL SELECT c.id,d.depth+1 FROM categories c JOIN descendants d ON c.parent_id=d.id WHERE d.depth<4) SELECT max(depth) AS depth FROM descendants',
+            [req.params.id || 0],
+          )
+        ).rows[0]?.depth || 1
+      if (chain.length + Number(depth) > 3)
+        return res
+          .status(400)
+          .json({ message: 'This change would exceed the three-level category limit.' })
+    }
+    if (m === 'admins') {
+      if (values.password) {
+        values.password_hash = passwordHash(values.password)
+        delete values.password
+      }
+    }
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const keys = Object.keys(values)
+      let row
+      if (req.params.id) {
+        row = (
+          await client.query(
+            `UPDATE ${m} SET ${keys.map((k, i) => `${k}=$${i + 1}`).join(',')} WHERE id=$${keys.length + 1} RETURNING id`,
+            [...Object.values(values), req.params.id],
+          )
+        ).rows[0]
+      } else
+        row = (
+          await client.query(
+            `INSERT INTO ${m}(${keys.join(',')}) VALUES(${keys.map((_, i) => `$${i + 1}`).join(',')}) RETURNING id`,
+            Object.values(values),
+          )
+        ).rows[0]
+      if (!row) {
+        await client.query('ROLLBACK')
+        return res.sendStatus(404)
+      }
+      if (m === 'admins' && values.password_hash)
+        await client.query('DELETE FROM admin_sessions WHERE admin_id=$1', [row.id])
+      await audit(client, req, req.params.id ? 'update' : 'create', m, row.id)
+      await client.query('COMMIT')
+      res.json(row)
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }
+  api.post('/api/admin/:module', guardSensitive, save)
+  api.put('/api/admin/orders/:id', async (req, res) => {
+    let v
+    try {
+      v = validate('orders', req.body, false)
+    } catch (e) {
+      return res.status(400).json({ message: e.message })
+    }
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      const old = (await c.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE', [req.params.id]))
+        .rows[0]
+      if (!old) {
+        await c.query('ROLLBACK')
+        return res.sendStatus(404)
+      }
+      if (old.status === 'Cancelled' && v.status !== 'Cancelled') {
+        await c.query('ROLLBACK')
+        return res
+          .status(400)
+          .json({ message: 'Cancelled orders cannot be reopened. Create a new order.' })
+      }
+      if (v.status === 'Cancelled' && old.status !== 'Cancelled')
+        await c.query(
+          'UPDATE variants v SET stock=stock+i.quantity FROM order_items i WHERE i.variant_id=v.id AND i.order_id=$1',
+          [old.id],
+        )
+      await c.query(
+        'UPDATE orders SET status=$1,payment_status=$2,tracking_number=$3,notes=$4 WHERE id=$5',
+        [v.status, v.payment_status, v.tracking_number, v.notes, old.id],
+      )
+      await audit(c, req, 'update', 'orders', old.id)
+      await c.query('COMMIT')
+      res.json({ id: old.id })
+    } catch (e) {
+      await c.query('ROLLBACK')
+      throw e
+    } finally {
+      c.release()
+    }
+  })
+  api.put('/api/admin/:module/:id', guardSensitive, save)
+  api.delete('/api/admin/:module/:id', guardSensitive, async (req, res) => {
+    const m = req.params.module,
+      id = Number(req.params.id)
+    if (!modules[m]) return res.sendStatus(404)
+    if (m === 'admins' && id === req.admin.id)
+      return res.status(400).json({ message: 'You cannot delete your own administrator account.' })
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      if (m === 'orders') {
+        const row = (await c.query('SELECT status FROM orders WHERE id=$1 FOR UPDATE', [id]))
+          .rows[0]
+        if (row && !['Cancelled', 'Delivered'].includes(row.status))
+          await c.query(
+            'UPDATE variants v SET stock=stock+i.quantity FROM order_items i WHERE i.variant_id=v.id AND i.order_id=$1',
+            [id],
+          )
+      }
+      const result = await c.query(`DELETE FROM ${m} WHERE id=$1`, [id])
+      if (!result.rowCount) {
+        await c.query('ROLLBACK')
+        return res.sendStatus(404)
+      }
+      await audit(c, req, 'delete', m, id)
+      await c.query('COMMIT')
+      res.json({ ok: true })
+    } catch (e) {
+      await c.query('ROLLBACK')
+      throw e
+    } finally {
+      c.release()
+    }
+  })
+  api.get('/api/store', async (_req, res) => {
+    const products = (
+      await pool.query(
+        'SELECT p.*,c.name category,coalesce((SELECT avg(r.rating) FROM reviews r WHERE r.product_id=p.id AND r.approved),0) rating,(SELECT count(*) FROM reviews r WHERE r.product_id=p.id AND r.approved) reviews FROM products p JOIN categories c ON c.id=p.category_id WHERE p.active AND c.active ORDER BY p.id',
+      )
+    ).rows
+    const variants = (await pool.query('SELECT * FROM variants ORDER BY price,id')).rows
+    const images = (await pool.query('SELECT * FROM product_images ORDER BY sort_order,id')).rows
+    const result = {
+      products: products
+        .map((p) => ({
+          ...p,
+          isNew: p.is_new,
+          rating: Number(p.rating).toFixed(1),
+          reviews: Number(p.reviews),
+          images: [
+            p.image,
+            ...images.filter((i) => i.product_id === p.id).map((i) => i.image),
+          ].filter(Boolean),
+          variants: variants
+            .filter((v) => v.product_id === p.id)
+            .map((v) => ({ ...v, price: Number(v.price), mrp: Number(v.mrp) })),
+        }))
+        .filter((p) => p.variants.length),
+    }
+    result.categories = (
+      await pool.query(
+        'SELECT c.*,coalesce(g.name,c.group_name) group_name FROM categories c LEFT JOIN category_groups g ON g.id=c.group_id WHERE c.active=true ORDER BY c.id',
+      )
+    ).rows
+    for (const m of ['coupons', 'banners', 'pages', 'navigation', 'content_sections', 'gift_boxes'])
+      result[m] = (await pool.query(`SELECT * FROM ${m} WHERE active=true ORDER BY id`)).rows
+    result.reviews = (
+      await pool.query(
+        'SELECT id,product_id,customer_name,rating,content FROM reviews WHERE approved=true ORDER BY id DESC',
+      )
+    ).rows
+    result.settings = Object.fromEntries(
+      (
+        await pool.query("SELECT key,value FROM settings WHERE key NOT LIKE 'shiprocket\\_%'")
+      ).rows.map((r) => [r.key, r.value]),
+    )
+    res.json(result)
+  })
+  async function createOrder(req, res) {
+    const body = req.body,
+      cust = body.customer || {},
+      items = body.items
+    const deliveryErrors = validateDelivery(cust)
+    if (Object.keys(deliveryErrors).length)
+      return res
+        .status(400)
+        .json({ message: 'Please correct the delivery information.', fields: deliveryErrors })
+    if (
+      !cust.name ||
+      !/^\d{10}$/.test(cust.mobile) ||
+      !/^\d{6}$/.test(cust.pincode) ||
+      !cust.address ||
+      !cust.city ||
+      !cust.state ||
+      !Array.isArray(items) ||
+      !items.length ||
+      items.length > 100
+    )
+      return res
+        .status(400)
+        .json({ message: 'Complete the delivery information and add products.' })
+    if (!['cod', 'razorpay'].includes(body.payment))
+      return res.status(400).json({ message: 'Choose Cash on Delivery or Razorpay.' })
+    if (body.payment === 'razorpay' && (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET))
+      return res.status(503).json({ message: 'Online payment is temporarily unavailable.' })
+    const method = body.shippingMethod
+    let quote = null
+    if (method !== undefined) {
+      const shippingSettings = await loadSettings(pool)
+      if (!shippingMethods(shippingSettings).includes(method))
+        return res.status(400).json({ message: 'Choose an available shipping method.' })
+      if (method === 'shiprocket') {
+        const couriers = await shiprocketRates(
+          cust.pincode,
+          await cartWeight(items),
+          body.payment === 'cod',
+          shippingSettings,
+        )
+        quote = couriers.find((x) => x.id === String(body.courierId || ''))
+        if (!quote)
+          return res.status(400).json({
+            message:
+              'The selected courier is not available for this PIN code. Check shipping rates again.',
+          })
+        if (Number(body.shippingQuote) !== quote.rate)
+          return res.status(409).json({
+            message: `The shipping rate is now ₹${quote.rate}. Check shipping rates again before placing your order.`,
+          })
+      }
+    }
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      let subtotal = 0
+      const saved = []
+      const combined = new Map()
+      for (const i of items) {
+        const id = Number(i.variantId || i.variant?.id),
+          qty = Number(i.qty)
+        if (!Number.isInteger(id) || !Number.isInteger(qty) || qty < 1 || qty > 100)
+          throw Object.assign(new Error('Invalid item quantity.'), { status: 400 })
+        combined.set(id, (combined.get(id) || 0) + qty)
+      }
+      for (const [id, qty] of [...combined].sort((a, b) => a[0] - b[0])) {
+        const v = (
+          await c.query(
+            'SELECT v.*,p.name,p.image,p.slug,p.active FROM variants v JOIN products p ON p.id=v.product_id WHERE v.id=$1 FOR UPDATE OF v',
+            [id],
+          )
+        ).rows[0]
+        if (!v || !v.active || v.stock < qty)
+          throw Object.assign(new Error('An item is unavailable or has insufficient stock.'), {
+            status: 400,
+          })
+        await c.query('UPDATE variants SET stock=stock-$1 WHERE id=$2 AND stock >= $1', [qty, id])
+        subtotal += Number(v.price) * qty
+        saved.push({ v, qty })
+      }
+      const settings = Object.fromEntries(
+        (await c.query('SELECT key,value FROM settings')).rows.map((r) => [r.key, r.value]),
+      )
+      let discount = 0
+      const couponCode = String(body.couponCode || '').toUpperCase()
+      if (couponCode) {
+        const coupon = (
+          await c.query('SELECT * FROM coupons WHERE code=$1 AND active=true', [couponCode])
+        ).rows[0]
+        if (!coupon || subtotal < Number(coupon.min_cart))
+          throw Object.assign(
+            new Error('Coupon is invalid or the minimum order has not been reached.'),
+            { status: 400 },
+          )
+        discount =
+          coupon.type === 'percent'
+            ? Math.round(subtotal * Number(coupon.value)) / 100
+            : Number(coupon.value)
+        discount = Math.min(discount, subtotal)
+      }
+      const shipping =
+        method === 'none'
+          ? 0
+          : quote
+            ? quote.rate
+            : subtotal >= Number(settings.free_shipping_threshold || 499)
+              ? 0
+              : Number(settings.shipping_fee || 79)
+      const total = Math.max(0, subtotal - discount + shipping)
+      const customer = (
+        await c.query(
+          'INSERT INTO customers(name,phone,email) VALUES($1,$2,$3) ON CONFLICT(phone) DO UPDATE SET name=EXCLUDED.name,email=EXCLUDED.email RETURNING id',
+          [cust.name, '+91' + cust.mobile, cust.email || ''],
+        )
+      ).rows[0]
+      await c.query(
+        'INSERT INTO addresses(customer_id,address,landmark,city,state,pincode) VALUES($1,$2,$3,$4,$5,$6)',
+        [customer.id, cust.address, cust.landmark || '', cust.city, cust.state, cust.pincode],
+      )
+      const number = `KIM${Date.now()}${randomBytes(2).toString('hex').toUpperCase()}`
+      const order = (
+        await c.query(
+          'INSERT INTO orders(order_number,customer_id,payment,subtotal,discount,shipping,total,customer_snapshot,coupon_code) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+          [
+            number,
+            customer.id,
+            body.payment,
+            subtotal,
+            discount,
+            shipping,
+            total,
+            JSON.stringify(cust),
+            couponCode || null,
+          ],
+        )
+      ).rows[0]
+      for (const { v, qty } of saved)
+        await c.query(
+          'INSERT INTO order_items(order_id,product_id,variant_id,product_name,weight,price,quantity) VALUES($1,$2,$3,$4,$5,$6,$7)',
+          [order.id, v.product_id, v.id, v.name, v.weight, v.price, qty],
+        )
+      let razorpay = null
+      if (body.payment === 'razorpay') {
+        const auth = Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString(
+          'base64',
+        )
+        const rr = await fetch('https://api.razorpay.com/v1/orders', {
+          method: 'POST',
+          headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: Math.round(total * 100),
+            currency: 'INR',
+            receipt: number,
+            notes: { kimish_order_id: String(order.id), order_number: number },
+          }),
+        })
+        const data = await rr.json()
+        if (!rr.ok)
+          throw Object.assign(new Error('Unable to start Razorpay payment.'), { status: 502 })
+        await c.query(
+          'INSERT INTO payments(order_id,provider_order_id,amount,status,raw_response) VALUES($1,$2,$3,$4,$5)',
+          [order.id, data.id, total, 'created', data],
+        )
+        razorpay = {
+          keyId: env.RAZORPAY_KEY_ID,
+          orderId: data.id,
+          amount: data.amount,
+          currency: data.currency,
+          name: 'Kimish',
+          description: `Order ${number}`,
+        }
+      } else
+        await c.query(
+          "INSERT INTO payments(order_id,amount,status,method) VALUES($1,$2,'created','cod')",
+          [order.id, total],
+        )
+      await c.query(
+        "INSERT INTO shipments(order_id,provider,courier_name,status) VALUES($1,$2,$3,'pending') ON CONFLICT(order_id) DO NOTHING",
+        [
+          order.id,
+          method === 'none' || method === 'inhouse' ? method : 'shiprocket',
+          quote?.name || '',
+        ],
+      )
+      if (req.admin) await audit(c, req, 'create', 'orders', order.id)
+      await c.query('COMMIT')
+      const response = {
+        id: number,
+        dbId: order.id,
+        customer: cust,
+        payment: body.payment,
+        shippingMethod: method || 'shiprocket',
+        courier: quote?.name || '',
+        subtotal,
+        discount,
+        shipping,
+        total,
+        status: 'Confirmed',
+        razorpay,
+        items: saved.map(({ v, qty }) => ({
+          product: { id: v.product_id, name: v.name, images: [v.image] },
+          variant: { id: v.id, weight: v.weight, price: Number(v.price) },
+          qty,
+        })),
+      }
+      if (body.payment === 'cod') syncShiprocket(order.id).catch(() => {})
+      res.status(201).json(response)
+    } catch (e) {
+      await c.query('ROLLBACK')
+      throw e
+    } finally {
+      c.release()
+    }
+  }
+  async function shiprocketToken() {
+    if (!env.SHIPROCKET_EMAIL || !env.SHIPROCKET_PASSWORD)
+      throw new Error('Shiprocket credentials are not configured.')
+    const r = await fetch('https://apiv2.shiprocket.in/v1/external/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: env.SHIPROCKET_EMAIL, password: env.SHIPROCKET_PASSWORD }),
+    })
+    const d = await r.json()
+    if (!r.ok || !d.token) throw new Error('Shiprocket authentication failed.')
+    return d.token
+  }
+  let shiprocketAuth = null
+  async function cachedShiprocketToken() {
+    if (shiprocketAuth && shiprocketAuth.until > Date.now()) return shiprocketAuth.token
+    const token = await shiprocketToken()
+    shiprocketAuth = { token, until: Date.now() + 8 * 864e5 }
+    return token
+  }
+  const shippingMethods = (settings) => {
+    const list = String(settings.shipping_methods || 'shiprocket,none,inhouse')
+      .split(',')
+      .map((m) => m.trim())
+      .filter((m) => ['shiprocket', 'none', 'inhouse'].includes(m))
+    return list.length ? list : ['inhouse']
+  }
+  const loadSettings = async (db) =>
+    Object.fromEntries(
+      (await db.query('SELECT key,value FROM settings')).rows.map((r) => [r.key, r.value]),
+    )
+  async function cartWeight(items) {
+    const qty = new Map()
+    for (const i of items) {
+      const id = Number(i.variantId || i.variant?.id),
+        q = Number(i.qty)
+      if (!Number.isInteger(id) || !Number.isInteger(q) || q < 1 || q > 100)
+        throw Object.assign(new Error('Invalid item quantity.'), { status: 400 })
+      qty.set(id, (qty.get(id) || 0) + q)
+    }
+    const rows = (
+      await pool.query('SELECT id,weight_kg FROM variants WHERE id=ANY($1::int[])', [
+        [...qty.keys()],
+      ])
+    ).rows
+    if (rows.length !== qty.size)
+      throw Object.assign(new Error('An item is unavailable.'), { status: 400 })
+    return Math.max(
+      0.5,
+      Math.round(
+        rows.reduce((sum, v) => sum + Number(v.weight_kg || 0.5) * qty.get(v.id), 0) * 1000,
+      ) / 1000,
+    )
+  }
+  async function shiprocketRates(pincode, weight, cod, settings) {
+    const unavailable = (reason) => {
+      console.warn('Shiprocket rates unavailable:', reason)
+      return Object.assign(new Error('Shiprocket rates are temporarily unavailable.'), {
+        status: 503,
+      })
+    }
+    if (!/^\d{6}$/.test(String(settings.shiprocket_pickup_pincode || '')))
+      throw unavailable('No Shiprocket pickup address is selected in Admin > Site Settings.')
+    let token
+    try {
+      token = await cachedShiprocketToken()
+    } catch (e) {
+      throw unavailable(e.message)
+    }
+    const q = new URLSearchParams({
+      pickup_postcode: settings.shiprocket_pickup_pincode,
+      delivery_postcode: pincode,
+      weight: String(weight),
+      cod: cod ? '1' : '0',
+    })
+    const r = await fetch(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${q}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const d = await r.json().catch(() => ({}))
+    if (r.status === 401) shiprocketAuth = null
+    if (r.status === 404) return []
+    if (!r.ok)
+      throw Object.assign(new Error('Could not fetch Shiprocket rates. Please try again.'), {
+        status: 502,
+      })
+    return (d.data?.available_courier_companies || [])
+      .map((x) => ({
+        id: String(x.courier_company_id),
+        name: String(x.courier_name || 'Courier'),
+        rate: Math.round(Number(x.rate ?? x.freight_charge) * 100) / 100,
+        etd: String(x.etd || ''),
+        days: String(x.estimated_delivery_days || ''),
+      }))
+      .filter((x) => Number.isFinite(x.rate) && x.rate >= 0)
+      .sort((a, b) => a.rate - b.rate)
+  }
+  async function syncShiprocket(orderId) {
+    const c = await pool.connect()
+    try {
+      const order = (await c.query('SELECT * FROM orders WHERE id=$1', [orderId])).rows[0]
+      if (!order) return
+      const existing = (await c.query('SELECT * FROM shipments WHERE order_id=$1', [orderId]))
+        .rows[0]
+      if (existing?.provider_order_id || (existing && existing.provider !== 'shiprocket')) return
+      const items = (
+        await c.query(
+          'SELECT oi.*,v.weight,v.weight_kg,v.length_cm,v.breadth_cm,v.height_cm FROM order_items oi LEFT JOIN variants v ON v.id=oi.variant_id WHERE oi.order_id=$1',
+          [orderId],
+        )
+      ).rows
+      const cust = order.customer_snapshot
+      const token = await cachedShiprocketToken()
+      const payload = {
+        order_id: order.order_number,
+        order_date: new Date(order.created_at).toISOString().slice(0, 19).replace('T', ' '),
+        pickup_location:
+          (await loadSettings(c)).shiprocket_pickup_location ||
+          env.SHIPROCKET_PICKUP_LOCATION ||
+          'Primary',
+        billing_customer_name: cust.name,
+        billing_last_name: '',
+        billing_address: cust.address,
+        billing_address_2: cust.landmark || '',
+        billing_city: cust.city,
+        billing_pincode: cust.pincode,
+        billing_state: cust.state,
+        billing_country: 'India',
+        billing_email: cust.email || 'orders@kimish.local',
+        billing_phone: cust.mobile,
+        shipping_is_billing: true,
+        order_items: items.map((i) => ({
+          name: i.product_name,
+          sku: `KIM-${i.variant_id || i.product_id}`,
+          units: i.quantity,
+          selling_price: Number(i.price),
+        })),
+        payment_method: order.payment === 'cod' ? 'COD' : 'Prepaid',
+        sub_total: Number(order.subtotal),
+        length: Math.max(...items.map((i) => Number(i.length_cm || 20))),
+        breadth: Math.max(...items.map((i) => Number(i.breadth_cm || 20))),
+        height: Math.max(...items.map((i) => Number(i.height_cm || 10))),
+        weight: Math.max(
+          0.5,
+          items.reduce((sum, i) => sum + Number(i.weight_kg || 0.5) * Number(i.quantity), 0),
+        ),
+      }
+      const r = await fetch('https://apiv2.shiprocket.in/v1/external/orders/create/adhoc', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.message || 'Shiprocket order creation failed.')
+      await c.query(
+        "UPDATE shipments SET provider_order_id=$1,shipment_id=$2,status='created',raw_response=$3,updated_at=now() WHERE order_id=$4",
+        [String(d.order_id || ''), String(d.shipment_id || ''), d, orderId],
+      )
+    } catch (e) {
+      await c.query(
+        "UPDATE shipments SET status='failed',raw_response=jsonb_build_object('error',$1),updated_at=now() WHERE order_id=$2",
+        [e.message, orderId],
+      )
+      throw e
+    } finally {
+      c.release()
+    }
+  }
+  api.post('/api/payments/razorpay/verify', async (req, res) => {
+    const { orderNumber, razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      req.body || {}
+    const order = (await pool.query('SELECT * FROM orders WHERE order_number=$1', [orderNumber]))
+      .rows[0]
+    if (!order) return res.status(404).json({ message: 'Order not found.' })
+    const payment = (
+      await pool.query('SELECT * FROM payments WHERE order_id=$1 AND provider_order_id=$2', [
+        order.id,
+        razorpay_order_id,
+      ])
+    ).rows[0]
+    if (!payment) return res.status(400).json({ message: 'Payment order mismatch.' })
+    const expected = createHmac('sha256', env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex')
+    const a = Buffer.from(expected),
+      b = Buffer.from(String(razorpay_signature || ''))
+    if (a.length !== b.length || !timingSafeEqual(a, b))
+      return res.status(400).json({ message: 'Payment verification failed.' })
+    const auth = Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64')
+    const pr = await fetch(
+      `https://api.razorpay.com/v1/payments/${encodeURIComponent(razorpay_payment_id)}`,
+      { headers: { Authorization: `Basic ${auth}` } },
+    )
+    const pd = await pr.json()
+    if (
+      !pr.ok ||
+      pd.order_id !== razorpay_order_id ||
+      pd.status !== 'captured' ||
+      Number(pd.amount) !== Math.round(Number(order.total) * 100)
+    )
+      return res
+        .status(400)
+        .json({ message: 'Payment is not captured yet. Please retry verification shortly.' })
+    await pool.query(
+      "UPDATE payments SET provider_payment_id=$1,status='captured',method=$2,raw_response=$3,updated_at=now() WHERE id=$4",
+      [razorpay_payment_id, String(pd.method || ''), pd, payment.id],
+    )
+    await pool.query("UPDATE orders SET payment_status='Paid' WHERE id=$1", [order.id])
+    syncShiprocket(order.id).catch(() => {})
+    res.json({ ok: true, orderNumber: order.order_number })
+  })
+  api.post('/api/payments/razorpay/cancel', async (req, res) => {
+    const { orderNumber, razorpay_order_id } = req.body || {}
+    if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET)
+      return res.status(503).json({ message: 'Online payment is temporarily unavailable.' })
+    if (!razorpay_order_id) return res.status(400).json({ message: 'Payment order is required.' })
+    const auth = Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64')
+    const pr = await fetch(
+      `https://api.razorpay.com/v1/orders/${encodeURIComponent(String(razorpay_order_id))}/payments`,
+      { headers: { Authorization: `Basic ${auth}` } },
+    )
+    const pd = await pr.json()
+    if (!pr.ok)
+      return res
+        .status(502)
+        .json({ message: 'Unable to confirm the payment status with Razorpay.' })
+    if ((pd.items || []).some((p) => ['authorized', 'captured'].includes(p.status)))
+      return res.status(409).json({
+        message: 'A payment for this order is being processed. Please wait for confirmation.',
+      })
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      const order = (
+        await c.query(
+          "SELECT o.* FROM orders o JOIN payments p ON p.order_id=o.id WHERE o.order_number=$1 AND p.provider_order_id=$2 AND o.payment='razorpay' FOR UPDATE OF o",
+          [String(orderNumber || ''), String(razorpay_order_id)],
+        )
+      ).rows[0]
+      if (!order) {
+        await c.query('ROLLBACK')
+        return res.status(404).json({ message: 'Order not found.' })
+      }
+      if (order.payment_status !== 'Unpaid' || order.status === 'Cancelled') {
+        await c.query('ROLLBACK')
+        return res.json({ ok: true, cancelled: false })
+      }
+      await c.query(
+        'UPDATE variants v SET stock=stock+i.quantity FROM order_items i WHERE i.variant_id=v.id AND i.order_id=$1',
+        [order.id],
+      )
+      await c.query(
+        "UPDATE orders SET status='Cancelled',notes=trim(coalesce(notes,'')||' Online payment was not completed; stock restored.') WHERE id=$1",
+        [order.id],
+      )
+      await c.query(
+        "UPDATE payments SET status='failed',updated_at=now() WHERE order_id=$1 AND status='created'",
+        [order.id],
+      )
+      await c.query(
+        "UPDATE shipments SET status='cancelled',updated_at=now() WHERE order_id=$1 AND status='pending'",
+        [order.id],
+      )
+      await c.query('COMMIT')
+      res.json({ ok: true, cancelled: true })
+    } catch (e) {
+      await c.query('ROLLBACK')
+      throw e
+    } finally {
+      c.release()
+    }
+  })
+  api.post('/api/webhooks/razorpay', async (req, res) => {
+    if (!env.RAZORPAY_WEBHOOK_SECRET) return res.sendStatus(503)
+    const sig = String(req.headers['x-razorpay-signature'] || '')
+    const expected = createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
+      .update(req.rawBody || Buffer.from(''))
+      .digest('hex')
+    const a = Buffer.from(expected),
+      b = Buffer.from(sig)
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return res.sendStatus(401)
+    const event = req.body || {}
+    await pool.query(
+      'INSERT INTO integration_events(provider,event_type,external_id,payload,processed) VALUES($1,$2,$3,$4,true)',
+      [
+        'razorpay',
+        String(event.event || 'unknown'),
+        String(event.payload?.payment?.entity?.id || ''),
+        event,
+      ],
+    )
+    const pay = event.payload?.payment?.entity
+    if (pay?.order_id) {
+      const status =
+        pay.status === 'captured' ? 'captured' : pay.status === 'failed' ? 'failed' : 'authorized'
+      await pool.query(
+        'UPDATE payments SET provider_payment_id=coalesce($1,provider_payment_id),status=$2,raw_response=$3,updated_at=now() WHERE provider_order_id=$4',
+        [pay.id || null, status, pay, pay.order_id],
+      )
+      if (status === 'captured') {
+        const row = (
+          await pool.query(
+            "UPDATE orders o SET payment_status='Paid' FROM payments p WHERE p.order_id=o.id AND p.provider_order_id=$1 RETURNING o.id",
+            [pay.order_id],
+          )
+        ).rows[0]
+        if (row) syncShiprocket(row.id).catch(() => {})
+      }
+    }
+    res.json({ ok: true })
+  })
+  api.post('/api/webhooks/shiprocket', async (req, res) => {
+    const secret = String(req.headers['x-api-key'] || req.headers['x-shiprocket-token'] || '')
+    if (env.SHIPROCKET_WEBHOOK_SECRET && secret !== env.SHIPROCKET_WEBHOOK_SECRET)
+      return res.sendStatus(401)
+    const body = req.body || {}
+    await pool.query(
+      'INSERT INTO integration_events(provider,event_type,external_id,payload,processed) VALUES($1,$2,$3,$4,true)',
+      [
+        'shiprocket',
+        String(body.current_status || body.status || 'update'),
+        String(body.awb || body.awb_code || ''),
+        body,
+      ],
+    )
+    const awb = String(body.awb || body.awb_code || '')
+    if (awb)
+      await pool.query(
+        "UPDATE shipments SET awb_code=$1,status=$2,courier_name=coalesce(nullif($3,''),courier_name),updated_at=now() WHERE awb_code=$1 OR shipment_id=$4",
+        [
+          awb,
+          String(body.current_status || body.status || 'updated'),
+          String(body.courier_name || ''),
+          String(body.shipment_id || ''),
+        ],
+      )
+    res.json({ ok: true })
+  })
+  api.use(['/api/orders', '/api/track', '/api/shipping'], (req, res, next) => {
+    const key = 'public:' + req.socket.remoteAddress
+    const old = attempts.get(key)
+    const value = old && old.until > Date.now() ? old : { count: 0, until: Date.now() + 60000 }
+    value.count++
+    attempts.set(key, value)
+    if (value.count > 20)
+      return res.status(429).json({ message: 'Too many requests. Please try again shortly.' })
+    next()
+  })
+  api.post('/api/orders', createOrder)
+  api.post('/api/shipping/rates', async (req, res) => {
+    const { pincode, items, payment } = req.body || {}
+    if (!/^\d{6}$/.test(String(pincode || '')))
+      return res.status(400).json({ message: 'Enter a valid 6-digit PIN code first.' })
+    if (!Array.isArray(items) || !items.length || items.length > 100)
+      return res.status(400).json({ message: 'Add products before checking shipping rates.' })
+    const settings = await loadSettings(pool)
+    if (!shippingMethods(settings).includes('shiprocket'))
+      return res.status(400).json({ message: 'Shiprocket shipping is not available.' })
+    const weight = await cartWeight(items)
+    res.json({
+      weight,
+      couriers: await shiprocketRates(String(pincode), weight, payment === 'cod', settings),
+    })
+  })
+  // Special order creation route must precede generic /:module in the client URL.
+  api.post('/api/admin/create/order', createOrder)
+  api.post('/api/track', async (req, res) => {
+    const { rows } = await pool.query(
+      "SELECT order_number,status,tracking_number,created_at FROM orders WHERE order_number=$1 AND customer_snapshot->>'mobile'=$2",
+      [String(req.body.orderId || ''), String(req.body.mobile || '')],
+    )
+    if (!rows[0]) return res.status(404).json({ message: 'No matching order found.' })
+    res.json(rows[0])
+  })
+  api.use('/api', (err, _req, res, _next) => {
+    console.error('API error:', err.code || err.name)
+    const conflict = ['23505', '23503', '23514', '22P02', '23502'].includes(err.code)
+    res.status(err.status || (conflict ? 400 : 500)).json({
+      message: err.status
+        ? err.message
+        : conflict
+          ? 'Check the fields. Values must be unique and valid; referenced records cannot be deleted.'
+          : 'The database request failed. Please try again.',
+    })
+  })
+  return { api, pool }
 }
