@@ -34,3 +34,4 @@
 .admin-page .admin-gallery-grid img{height:100px}
 .admin-page .admin-category-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
 @media(max-width:700px){.admin-page .admin-modal{padding:14px}.admin-page .admin-modal-actions{bottom:-14px}.admin-page .admin-category-fields{grid-template-columns:1fr}.admin-page .admin-form-grid{gap:9px}.admin-page .admin-detail-section{padding:10px}}
+.shiprocket-pickup{border:1px solid var(--border);border-radius:10px;padding:18px;margin:0 0 22px;background:#fffdf8}.shiprocket-pickup h3{margin:0 0 6px}.shiprocket-pickup select{min-width:min(100%,320px)}.shiprocket-pickup-address{color:var(--muted);font-size:14px;margin:4px 0 0}

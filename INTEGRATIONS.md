@@ -9,11 +9,11 @@
 
 ## Shiprocket
 1. In Shiprocket Settings > API create a dedicated API user (not your normal account login).
-2. Add `SHIPROCKET_EMAIL`, `SHIPROCKET_PASSWORD`, and the exact Shiprocket pickup-location nickname to `.env`.
+2. Add `SHIPROCKET_EMAIL` and `SHIPROCKET_PASSWORD` to `.env`, then in Admin > Site Settings choose the pickup address from the "Shiprocket pickup address" dropdown (loaded from your Shiprocket account's Pickup Addresses).
 3. Configure a shipment webhook to `https://YOUR-DOMAIN/api/webhooks/shiprocket`. If using a custom secret header, set the same value as `SHIPROCKET_WEBHOOK_SECRET`.
 4. COD orders are sent to Shiprocket after local order creation. Razorpay orders are sent only after payment verification.
 5. Shiprocket ids/status/raw responses are persisted in `shipments`.
-6. Set `SHIPROCKET_PICKUP_PINCODE` so checkout can show courier rate estimates (`POST /api/shipping/rates`). The server re-checks the chosen courier rate when the order is placed.
+6. Checkout rate estimates (`POST /api/shipping/rates`) use the selected pickup address's PIN code; the server re-checks the chosen courier rate when the order is placed. The selection is stored in the `shiprocket_pickup_location` / `shiprocket_pickup_pincode` settings, which are not exposed to the storefront.
 7. The `shipping_methods` site setting controls which checkout shipping options appear (comma-separated: `shiprocket,none,inhouse`; default all three). Only `shiprocket` orders are booked with Shiprocket; `inhouse` uses the `shipping_fee`/`free_shipping_threshold` settings and `none` charges nothing.
 
 ## Database
