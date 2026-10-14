@@ -9,10 +9,6 @@ export const hash = (value) => createHash('sha256').update(value).digest('hex')
 export const cookies = (req) =>
   Object.fromEntries((req.headers.cookie || '').split(';').map((s) => s.trim().split('=')))
 
-// Behind Vercel's proxy the socket address is the proxy's; Vercel sets x-real-ip to the client address
-export const clientIp = (req, env) =>
-  (env.VERCEL && req.headers['x-real-ip']) || req.socket.remoteAddress || 'unknown'
-
 // Runs fn(client) in a transaction: commits when it returns, rolls back when it throws
 export async function withTransaction(pool, fn) {
   const client = await pool.connect()

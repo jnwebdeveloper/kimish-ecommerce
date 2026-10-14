@@ -1,6 +1,4 @@
 import { randomBytes, createHash } from 'node:crypto'
-import { clientIp } from './lib/http.js'
-import { hitRateLimit } from './lib/rateLimit.js'
 
 export const normalizePhone = (value) => {
   const digits = String(value || '').replace(/[\s()-]/g, '')
@@ -50,7 +48,15 @@ function databaseStore(pool) {
       await pool.query('DELETE FROM customer_otp_challenges WHERE expires_at<=now()')
       await pool.query('DELETE FROM auth_rate_limits WHERE expires_at<=now()')
     },
-    hit: (key, window) => hitRateLimit(pool, key, window),
+    async hit(key, window) {
+      const { rows } = await pool.query(
+        `INSERT INTO auth_rate_limits(key,count,expires_at) VALUES($1,1,now()+$2*interval '1 millisecond')
+        ON CONFLICT(key) DO UPDATE SET count=CASE WHEN auth_rate_limits.expires_at<=now() THEN 1 ELSE auth_rate_limits.count+1 END,
+        expires_at=CASE WHEN auth_rate_limits.expires_at<=now() THEN EXCLUDED.expires_at ELSE auth_rate_limits.expires_at END RETURNING count`,
+        [key, window],
+      )
+      return rows[0].count
+    },
     async create(id, phone) {
       await pool.query(
         "INSERT INTO customer_otp_challenges(token_hash,phone,expires_at) VALUES($1,$2,now()+interval '10 minutes')",
@@ -182,7 +188,9 @@ export function createAuthHandler({
           throw fail(400, 'Invalid request.')
         }
       }
-      const ip = clientIp(request, env)
+      // Behind Vercel's proxy the socket address is the proxy's; Vercel sets x-real-ip to the client address.
+      const ip =
+        (env.VERCEL && request.headers['x-real-ip']) || request.socket.remoteAddress || 'unknown'
       await store.sweep()
       if (path === '/api/auth/send') {
         const phone = normalizePhone(body.phone)

@@ -1,20 +1,23 @@
 import express from 'express'
 import { randomBytes } from 'node:crypto'
 import { passwordResetConfigured, sendPasswordReset } from '../integrations/email.js'
-import { clientIp, hash, httpError, withTransaction } from '../lib/http.js'
-import { clearRateLimit, hitRateLimit } from '../lib/rateLimit.js'
+import { hash, httpError, withTransaction } from '../lib/http.js'
 import { sessionCookie } from '../middleware/adminSession.js'
 import { passwordHash, passwordValid } from '../password.js'
 
 // Admin sign-in and password recovery (no session required). Mounted at /api/admin.
-export function adminAuthRoutes({ pool, env, origin }) {
+export function adminAuthRoutes({ pool, env, origin, attempts }) {
   const router = express.Router()
 
-  // 8 attempts per client IP per 15 minutes; a successful sign-in resets the count
+  // 8 attempts per IP per 15 minutes (counted per server instance); a successful sign-in resets the count
   router.post('/login', async (req, res) => {
-    const limitKey = 'admin-login:' + clientIp(req, env)
-    if ((await hitRateLimit(pool, limitKey, 900000)) > 8)
-      throw httpError(429, 'Too many attempts. Try again in 15 minutes.')
+    const ip = req.socket.remoteAddress
+    const previous = attempts.get(ip)
+    const attempt =
+      previous && previous.until > Date.now() ? previous : { count: 0, until: Date.now() + 900000 }
+    if (attempt.count >= 8) throw httpError(429, 'Too many attempts. Try again in 15 minutes.')
+    attempt.count++
+    attempts.set(ip, attempt)
     const admin = (
       await pool.query('SELECT * FROM admins WHERE lower(email)=lower($1)', [
         String(req.body.email || ''),
@@ -22,7 +25,7 @@ export function adminAuthRoutes({ pool, env, origin }) {
     ).rows[0]
     if (!admin || !passwordValid(String(req.body.password || ''), admin.password_hash))
       throw httpError(401, 'Incorrect email or password.')
-    await clearRateLimit(pool, limitKey)
+    attempts.delete(ip)
     const token = randomBytes(32).toString('hex')
     await pool.query(
       "INSERT INTO admin_sessions(token_hash,admin_id,expires_at) VALUES($1,$2,now()+interval '8 hours')",
@@ -32,13 +35,20 @@ export function adminAuthRoutes({ pool, env, origin }) {
     res.json({ admin: { id: admin.id, name: admin.name, email: admin.email } })
   })
 
-  // Always answers the same way for known and unknown emails; 5 requests per IP per hour
+  // Always answers the same way for known and unknown emails; 5 requests per IP per hour (per instance)
   router.post('/forgot-password', async (req, res) => {
     const email = String(req.body?.email || '')
       .trim()
       .toLowerCase()
-    if ((await hitRateLimit(pool, 'admin-reset:' + clientIp(req, env), 3600000)) > 5)
-      throw httpError(429, 'Too many requests. Try again later.')
+    const key = 'reset:' + req.socket.remoteAddress
+    const entry = attempts.get(key) || { count: 0, until: Date.now() + 3600000 }
+    if (entry.until < Date.now()) {
+      entry.count = 0
+      entry.until = Date.now() + 3600000
+    }
+    entry.count++
+    attempts.set(key, entry)
+    if (entry.count > 5) throw httpError(429, 'Too many requests. Try again later.')
     const generic = { message: 'If this email is registered, a password reset link will be sent.' }
     if (!passwordResetConfigured(env))
       throw httpError(503, 'Password recovery email is not configured.')

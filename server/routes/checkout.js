@@ -1,26 +1,24 @@
 import express from 'express'
 import { httpError } from '../lib/http.js'
-import { rateLimit } from '../middleware/rateLimit.js'
 import { cartWeight, placeOrder } from '../services/orders.js'
 import { loadSettings, shippingMethods } from '../services/settings.js'
 
 // Checkout, shipping quotes and order tracking. Mounted at /api.
 export function checkoutRoutes(ctx) {
-  const { pool, env, shiprocket } = ctx
+  const { pool, shiprocket, attempts } = ctx
   const router = express.Router()
 
-  // 20 requests per client IP per minute across these public endpoints
-  router.use(
-    ['/orders', '/track', '/shipping'],
-    rateLimit({
-      pool,
-      env,
-      name: 'public',
-      max: 20,
-      windowMs: 60000,
-      message: 'Too many requests. Please try again shortly.',
-    }),
-  )
+  // 20 requests per IP per minute across these public endpoints (counted per server instance)
+  router.use(['/orders', '/track', '/shipping'], (req, res, next) => {
+    const key = 'public:' + req.socket.remoteAddress
+    const old = attempts.get(key)
+    const value = old && old.until > Date.now() ? old : { count: 0, until: Date.now() + 60000 }
+    value.count++
+    attempts.set(key, value)
+    if (value.count > 20)
+      return res.status(429).json({ message: 'Too many requests. Please try again shortly.' })
+    next()
+  })
 
   router.post('/orders', async (req, res) => res.status(201).json(await placeOrder(ctx, req.body)))
 

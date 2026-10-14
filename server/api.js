@@ -26,6 +26,8 @@ export function createApi(env) {
     origin,
     razorpay: createRazorpay(env),
     shiprocket: createShiprocket(env),
+    // In-memory request counters for admin login, password reset and public checkout limits
+    attempts: new Map(),
   }
 
   const api = express()
