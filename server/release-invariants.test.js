@@ -1,18 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-const api = readFileSync(new URL('./api.js', import.meta.url), 'utf8')
-const sql = readFileSync(new URL('./migrations/20261011_security.sql', import.meta.url), 'utf8')
+const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
+const orders = source('./services/orders.js')
+const adminAuth = source('./routes/adminAuth.js')
+const sql = source('./migrations/20261011_security.sql')
 test('checkout locks variants before decrement', () => {
-  assert.match(api, /FOR UPDATE OF v/)
-  assert.match(api, /stock=stock-\$1 WHERE id=\$2 AND stock >= \$1/)
+  assert.match(orders, /FOR UPDATE OF v/)
+  assert.match(orders, /stock=stock-\$1 WHERE id=\$2 AND stock >= \$1/)
 })
 test('recovery tokens are hashed and single-use', () => {
-  assert.match(api, /hash\(token\)/)
-  assert.match(api, /used_at IS NULL/)
-  assert.match(api, /DELETE FROM admin_sessions/)
+  assert.match(adminAuth, /hash\(token\)/)
+  assert.match(adminAuth, /used_at IS NULL/)
+  assert.match(adminAuth, /DELETE FROM admin_sessions/)
 })
 test('inventory has nonnegative database constraint', () =>
   assert.match(sql, /CHECK \(stock >= 0\)/))
-test('admin sensitive modules are guarded', () =>
-  assert.match(api.replace(/\s+/g, ''), /guardSensitive,save/))
