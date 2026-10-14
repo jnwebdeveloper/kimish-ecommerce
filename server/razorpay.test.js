@@ -67,7 +67,7 @@ test('Razorpay checkout: abandoned payments restore stock, verified payments are
     const category = await add('categories', {
       name: 'QA Razorpay Category',
       slug: 'qa-razorpay-category',
-      group_name: 'Nuts',
+      group_id: (await pool.query("SELECT id FROM category_groups WHERE name='Nuts'")).rows[0].id,
       active: true,
     })
     const product = await add('products', {
@@ -83,6 +83,10 @@ test('Razorpay checkout: abandoned payments restore stock, verified payments are
       price: 600,
       mrp: 700,
       stock: 10,
+      weight_kg: 0.5,
+      length_cm: 20,
+      breadth_cm: 20,
+      height_cm: 10,
     })
     const order = {
       customer: {

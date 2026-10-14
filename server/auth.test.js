@@ -117,6 +117,10 @@ test('Phone OTP works through the Express stack with challenges shared across in
   }
   const phone = '9' + String(Date.now()).slice(-9),
     pool = instances[0].pool
+  // Per-IP limits persist in the database; reset localhost's so repeated test runs don't hit them
+  await pool.query(
+    "DELETE FROM auth_rate_limits WHERE key ~ '^(send|verify)-ip:(::ffff:)?127\\.0\\.0\\.1$'",
+  )
   try {
     let r = await call(0, 'send', { phone })
     assert.equal(r.status, 200, JSON.stringify(r.data))

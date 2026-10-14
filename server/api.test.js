@@ -7,6 +7,8 @@ const env = {
   ...process.env,
   AUTH_ORIGIN: 'http://localhost:5173',
 }
+// The test signs in as ADMIN_EMAIL and also manages administrators, which only the primary admin may do
+env.PRIMARY_ADMIN_EMAIL = env.ADMIN_EMAIL
 test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization', async () => {
   const { api, pool } = createApi(env),
     server = api.listen(0, '127.0.0.1')
@@ -48,7 +50,7 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
     const category = await add('categories', {
       name: 'QA Category',
       slug: 'qa-category',
-      group_name: 'Nuts',
+      group_id: (await pool.query("SELECT id FROM category_groups WHERE name='Nuts'")).rows[0].id,
       active: true,
     })
     const product = await add('products', {
@@ -65,14 +67,18 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
       price: 100,
       mrp: 120,
       stock: 10,
+      weight_kg: 0.5,
+      length_cm: 20,
+      breadth_cm: 20,
+      height_cm: 10,
     })
-    const image = await add('product_images', {
+    await add('product_images', {
       product_id: product,
       image: '/products/kimish-cashew.png',
     })
     const customer = await add('customers', {
       name: 'QA Customer',
-      phone: '+919000000001',
+      phone: '9000000001',
       email: 'qa@example.invalid',
     })
     await add('addresses', {
@@ -101,7 +107,13 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
         content: 'QA review',
         approved: true,
       },
-      navigation: { label: 'QA', url: '/shop', location: 'footer', active: true },
+      navigation: {
+        label: 'QA',
+        url: '/shop',
+        location: 'footer',
+        menu_type: 'link',
+        active: true,
+      },
       settings: { key: 'qa_setting', value: 'before' },
       admins: {
         name: 'QA Admin',
@@ -144,6 +156,12 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
     const orderRow = (await pool.query('SELECT id FROM orders WHERE order_number=$1', [number]))
       .rows[0]
     created.push(['orders', orderRow.id])
+    // The admin orders list attaches each order's line items (loaded in one query for all orders)
+    const listed = (await call('/api/admin/orders')).data.find((o) => o.id === orderRow.id)
+    assert.deepEqual(
+      listed.items.map((i) => [i.variant_id, i.quantity]),
+      [[variant, 2]],
+    )
     assert.equal(
       (await pool.query('SELECT stock FROM variants WHERE id=$1', [variant])).rows[0].stock,
       8,

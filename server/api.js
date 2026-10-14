@@ -1141,7 +1141,7 @@ export function createApi(env) {
   })
   api.use('/api', (err, _req, res, _next) => {
     console.error('API error:', err.code || err.name)
-    const conflict = ['23505', '23503', '23514', '22P02', '23502'].includes(err.code)
+    const conflict = ['23505', '23503', '23001', '23514', '22P02', '23502'].includes(err.code)
     res.status(err.status || (conflict ? 400 : 500)).json({
       message: err.status
         ? err.message
