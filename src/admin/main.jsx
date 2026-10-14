@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Admin from './Admin'
 import './admin-base.css'
 import './admin.css'
@@ -35,4 +36,14 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><Admin /></ErrorBoundary>)
+// Every admin address (/admin, /admin/login, /admin/products, …) renders Admin, which picks the screen from the URL
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <ErrorBoundary>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/admin/*" element={<Admin />} />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
+      </Routes>
+    </BrowserRouter>
+  </ErrorBoundary>
+)

@@ -23,3 +23,6 @@ body{background:#f6f7f3}
 .admin-login input{box-sizing:border-box;width:100%;border:1px solid #d9ded4;background:#fff;color:#263128;border-radius:8px;padding:11px 12px;font:inherit;font-size:15px}
 .admin-login input:focus{outline:3px solid #dfe8d4;border-color:#697e51}
 .admin-boot{min-height:100vh;display:grid;place-items:center}
+.admin-sidebar a:not(.active):hover{background:#eef1e8}
+.admin-not-found{max-width:520px;padding:40px 0}
+.admin-not-found p{color:#737a71;margin:0 0 20px}
