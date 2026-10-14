@@ -11,5 +11,7 @@ export default defineConfig(({ mode }) => {
       configureServer(server) { const backend=createApi(env); server.middlewares.use(backend.api); server.middlewares.use(createAuthHandler({ env, pool:backend.pool })); server.httpServer?.on('close',()=>backend.pool.end()) },
       configurePreviewServer(server) { const backend=createApi(env); server.middlewares.use(backend.api); server.middlewares.use(createAuthHandler({ env, pool:backend.pool })); server.httpServer?.on('close',()=>backend.pool.end()) },
     }],
+    // Allow Cloudflare quick tunnels (cloudflared tunnel --url) to reach the dev server, e.g. for Razorpay webhooks
+    server: { allowedHosts: ['.trycloudflare.com'] },
   }
 })
