@@ -1,0 +1,25 @@
+/* Back-office app shell: sticky top bar, full-height sidebar and scrolling workspace */
+body{background:#f6f7f3}
+.admin-app{max-width:none;min-height:100vh;display:flex;flex-direction:column}
+.admin-topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;flex-wrap:wrap;gap:12px 16px;min-height:64px;padding:10px 24px;background:#fff;border-bottom:1px solid #e4e7df}
+.admin-brand{display:flex;align-items:center;gap:12px}
+.admin-brand img{height:40px;width:auto}
+.admin-brand span{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#697e51}
+.admin-topbar-actions{margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.admin-user{display:flex;flex-direction:column;align-items:flex-end;margin-right:8px;font-size:12px;line-height:1.35;color:#737a71}
+.admin-user strong{font-size:13px;color:#263128}
+.admin-topbar .btn{min-height:36px;padding:7px 14px;font-size:13px}
+.admin-app .admin-shell{flex:1;grid-template-columns:240px minmax(0,1fr);gap:0}
+.admin-app .admin-sidebar{position:sticky;top:64px;height:calc(100vh - 64px);overflow-y:auto;border:0;border-right:1px solid #e4e7df;border-radius:0;padding:12px}
+.admin-app .admin-workspace{padding:28px clamp(16px,3vw,40px) 48px}
+.admin-app .admin-workspace>h2{margin-top:0}
+@media(max-width:900px){.admin-app .admin-shell{grid-template-columns:minmax(0,1fr)}.admin-app .admin-sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid #e4e7df}.admin-user{display:none}.admin-topbar{position:static;padding:10px 16px}}
+.admin-login{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
+.admin-login .phone-login-card{width:min(440px,100%);margin:0}
+.admin-login-brand{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:8px}
+.admin-login-brand img{height:64px;width:auto;margin-bottom:12px}
+.admin-login-brand h1{font-family:inherit;font-size:26px;letter-spacing:-.5px;margin:6px 0 4px}
+.admin-login-brand p{margin:0;color:#737a71;font-size:14px}
+.admin-login input{box-sizing:border-box;width:100%;border:1px solid #d9ded4;background:#fff;color:#263128;border-radius:8px;padding:11px 12px;font:inherit;font-size:15px}
+.admin-login input:focus{outline:3px solid #dfe8d4;border-color:#697e51}
+.admin-boot{min-height:100vh;display:grid;place-items:center}

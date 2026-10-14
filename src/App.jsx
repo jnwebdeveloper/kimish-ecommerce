@@ -13,7 +13,6 @@ import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
 import OrderConfirmation from './pages/OrderConfirmation'
 import Wishlist from './pages/Wishlist'
-import Admin from './pages/Admin'
 import CustomisedGifts, { GiftDetail } from './pages/CustomisedGifts'
 import { Offers, Policy, TrackOrder } from './pages/StaticPages'
 
@@ -102,7 +101,6 @@ export default function App() {
         <Route path="/track-order" element={<TrackOrder />} />
         <Route path="/pages/:slug" element={<Policy />} />
         <Route path="/policy" element={<Policy />} />
-        <Route path="/admin" element={<Admin />} />
       </Routes>
       <Footer />
     </div>
