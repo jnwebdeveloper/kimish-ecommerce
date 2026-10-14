@@ -63,7 +63,7 @@ export function adminAuthRoutes({ pool, env, origin, attempts }) {
       )
       const link = new URL('/admin/reset-password', env.PUBLIC_SITE_URL)
       link.searchParams.set('token', token)
-      if (!(await sendPasswordReset(env, admin.email, link)))
+      if (!(await sendPasswordReset(env, admin.email, link, req.log)))
         throw httpError(503, 'Password recovery email could not be sent. Please retry later.')
     }
     res.json(generic)

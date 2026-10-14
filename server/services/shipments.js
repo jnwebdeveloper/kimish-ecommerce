@@ -65,7 +65,10 @@ export async function syncShipment({ pool, env, shiprocket }, orderId) {
   }
 }
 
-// Shipment creation must not delay or fail the customer's request; failures are stored on the shipment
+// Shipment creation must not delay or fail the customer's request; failures are stored on the
+// shipment and logged
 export const syncShipmentInBackground = (ctx, orderId) => {
-  syncShipment(ctx, orderId).catch(() => {})
+  syncShipment(ctx, orderId).catch((err) =>
+    ctx.log.error('Shiprocket shipment creation failed', { orderId, err }),
+  )
 }

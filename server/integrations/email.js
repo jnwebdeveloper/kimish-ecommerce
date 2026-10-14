@@ -3,7 +3,7 @@ export const passwordResetConfigured = (env) =>
   Boolean(env.RESEND_API_KEY && env.PASSWORD_RESET_FROM && env.PUBLIC_SITE_URL)
 
 // Returns false when Resend rejects the message
-export async function sendPasswordReset(env, to, link) {
+export async function sendPasswordReset(env, to, link, log) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -14,6 +14,6 @@ export async function sendPasswordReset(env, to, link) {
       text: `Reset your password using this single-use link (expires in 20 minutes): ${link}`,
     }),
   })
-  if (!response.ok) console.error('Password reset email delivery failed:', response.status)
+  if (!response.ok) log.error('Password reset email delivery failed', { status: response.status })
   return response.ok
 }

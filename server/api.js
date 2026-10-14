@@ -2,8 +2,10 @@ import express from 'express'
 import { createPool } from './db.js'
 import { createRazorpay } from './integrations/razorpay.js'
 import { createShiprocket } from './integrations/shiprocket.js'
+import { createLogger } from './lib/logger.js'
 import { requireAdmin } from './middleware/adminSession.js'
 import { errorHandler } from './middleware/errors.js'
+import { requestLog } from './middleware/requestLog.js'
 import { jsonBody, noStore, sameOriginWrites, securityHeaders } from './middleware/security.js'
 import { adminAccountRoutes } from './routes/adminAccount.js'
 import { adminAuthRoutes } from './routes/adminAuth.js'
@@ -19,13 +21,15 @@ import { webhookRoutes } from './routes/webhooks.js'
 export function createApi(env) {
   const pool = createPool(env)
   const origin = env.AUTH_ORIGIN || 'http://localhost:5173'
-  // Shared by every router: configuration, database and outside services
+  const log = createLogger(env)
+  // Shared by every router: configuration, database, logger and outside services
   const ctx = {
     env,
     pool,
     origin,
+    log,
     razorpay: createRazorpay(env),
-    shiprocket: createShiprocket(env),
+    shiprocket: createShiprocket(env, log),
     // In-memory request counters for admin login, password reset and public checkout limits
     attempts: new Map(),
   }
@@ -33,6 +37,7 @@ export function createApi(env) {
   const api = express()
   api.disable('x-powered-by')
   api.use(securityHeaders)
+  api.use('/api', requestLog(log))
   api.use(jsonBody)
   api.use('/api', noStore, sameOriginWrites(origin))
 

@@ -3,7 +3,7 @@ import { httpError } from '../lib/http.js'
 const base = 'https://apiv2.shiprocket.in/v1/external'
 
 // Shiprocket API: login token (cached per server instance), pickup addresses, courier rates, shipments
-export function createShiprocket(env) {
+export function createShiprocket(env, log) {
   let auth = null
 
   async function login() {
@@ -54,7 +54,7 @@ export function createShiprocket(env) {
   // Couriers for a delivery PIN code, cheapest first; [] when none serve it
   async function rates(pincode, weight, cod, settings) {
     const unavailable = (reason) => {
-      console.warn('Shiprocket rates unavailable:', reason)
+      log.warn('Shiprocket rates unavailable', { reason })
       return httpError(503, 'Shiprocket rates are temporarily unavailable.')
     }
     if (!/^\d{6}$/.test(String(settings.shiprocket_pickup_pincode || '')))
