@@ -3,8 +3,7 @@ import ProductCard from '../components/ProductCard'
 import { useStore } from '../data/StoreContext'
 
 export default function Wishlist({ wishlist, ...props }) {
-  const { products, categories, content_sections, banners, settings, reviews, navigation } =
-    useStore()
+  const { products } = useStore()
   const list = products.filter((p) => wishlist.includes(p.id))
   return (
     <main className="section page-top">

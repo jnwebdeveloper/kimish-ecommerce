@@ -4,8 +4,7 @@ import ProductCard from '../components/ProductCard'
 import { useStore } from '../data/StoreContext'
 
 export default function Shop({ query, ...props }) {
-  const { products, categories, content_sections, banners, settings, reviews, navigation } =
-    useStore()
+  const { products } = useStore()
   const [params, setParams] = useSearchParams()
   const [category, setCategory] = useState(params.get('category') || 'All')
   const [sort, setSort] = useState(params.get('sort') || 'featured')
@@ -44,7 +43,7 @@ export default function Shop({ query, ...props }) {
       list = [...list].sort((a, b) => b.variants[0].price - a.variants[0].price)
     if (sort === 'new') list = [...list].sort((a, b) => Number(b.isNew) - Number(a.isNew))
     return list
-  }, [category, sort, weight, maxPrice, query])
+  }, [products, category, sort, weight, maxPrice, query])
 
   function updateCategory(value) {
     setCategory(value)

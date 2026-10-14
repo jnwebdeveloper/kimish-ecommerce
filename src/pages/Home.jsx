@@ -15,12 +15,10 @@ import { useStore } from '../data/StoreContext'
 import '../home-editorial.css'
 
 export default function Home(props) {
-  const { products, categories, content_sections, banners, settings, reviews, navigation } =
-    useStore()
+  const { products, categories, content_sections, banners, settings } = useStore()
   const content = Object.fromEntries(content_sections.map((section) => [section.key, section]))
   const seasonal = banners.find((b) => b.placement === 'seasonal')
   const bottom = banners.find((b) => b.placement === 'bottom')
-  const heroBanner = banners.find((b) => b.placement === 'hero')
 
   const photo = (name) => products.find((p) => p.category === name)?.images[0]
   const menuCategories = categories.map((c) => ({
@@ -33,7 +31,6 @@ export default function Home(props) {
   const favourites = products.filter((p) => p.featured).slice(0, 3)
   const arrivals = [...products].sort((a, b) => Number(b.isNew) - Number(a.isNew)).slice(0, 4)
   const almond = photo('Almonds'),
-    cashew = photo('Cashew'),
     makhana = photo('Makhana'),
     cranberry = photo('Cranberries')
 

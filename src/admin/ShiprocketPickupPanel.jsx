@@ -50,7 +50,7 @@ export default function ShiprocketPickupPanel() {
     <section className="shiprocket-pickup">
       <h3>Shiprocket pickup address</h3>
       <p className="admin-module-help">
-        Courier rates are calculated from this address's PIN code, and Shiprocket shipments are
+        Courier rates are calculated from this address&apos;s PIN code, and Shiprocket shipments are
         created from it. Add or edit addresses in Shiprocket under Settings › Pickup Addresses, then
         reload.
       </p>

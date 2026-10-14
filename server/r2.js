@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-export async function presignImage(env, { filename, type, size }) {
+export async function presignImage(env, { type, size }) {
   if (
     !env.R2_ACCOUNT_ID ||
     !env.R2_ACCESS_KEY_ID ||

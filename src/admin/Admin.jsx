@@ -167,6 +167,8 @@ export default function Admin() {
     setDetails(null)
     setDeleting(null)
     if (admin) setNotice('')
+    // Runs only when the signed-in admin or the screen changes; load is recreated every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admin, module])
   const notFound =
     !onLogin &&
@@ -185,8 +187,20 @@ export default function Admin() {
   useEffect(() => {
     document.title = `${title} · Kimish Admin`
   }, [title])
+  // Which dialog is open; the focus trap re-runs when it changes (e.g. Details → Edit) so it targets the new dialog
+  const openDialog = editor
+    ? 'editor'
+    : details
+      ? 'details'
+      : deleting
+        ? 'delete'
+        : manual
+          ? 'order'
+          : changingPassword
+            ? 'password'
+            : null
   useEffect(() => {
-    if (!editor && !details && !deleting && !manual && !changingPassword) return
+    if (!openDialog) return
     const previous = document.activeElement,
       overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -224,7 +238,7 @@ export default function Admin() {
       document.removeEventListener('keydown', keydown)
       previous?.focus()
     }
-  }, [!!editor, !!details, !!deleting, !!manual, changingPassword, busy])
+  }, [openDialog, busy])
   async function login(e) {
     e.preventDefault()
     setError('')
@@ -561,7 +575,7 @@ export default function Admin() {
       {notFound ? (
         <div className="admin-not-found">
           <h2>Page not found</h2>
-          <p>This admin page doesn't exist, or you don't have access to it.</p>
+          <p>This admin page doesn&apos;t exist, or you don&apos;t have access to it.</p>
           <Link className="btn btn-primary" to="/admin">
             Go to Overview
           </Link>

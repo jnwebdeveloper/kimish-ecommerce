@@ -4,7 +4,9 @@ import { createApi } from './api.js'
 import { createAuthHandler } from './auth.js'
 try {
   process.loadEnvFile('.env')
-} catch {}
+} catch {
+  // .env is optional: hosts like Vercel inject environment variables directly
+}
 const { api, pool } = createApi(process.env)
 api.use(createAuthHandler({ env: process.env, pool }))
 api.use(express.static(resolve('dist')))

@@ -49,16 +49,8 @@ const menus = [
     ],
   },
 ]
-export default function Header({
-  cartCount = 0,
-  wishlistCount = 0,
-  addToCart,
-  toggleWishlist,
-  wishlist = [],
-  user,
-}) {
-  const { products, categories, content_sections, banners, settings, reviews, navigation } =
-    useStore()
+export default function Header({ cartCount = 0, wishlistCount = 0, user }) {
+  const { products, categories, settings } = useStore()
   const [openMenu, setOpenMenu] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const headerRef = useRef(null)

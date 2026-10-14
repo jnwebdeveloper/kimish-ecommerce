@@ -39,6 +39,23 @@ npm install
 npm run dev
 ```
 
+## Code style
+
+Prettier formats the code and ESLint checks it (`.prettierrc.json`, `eslint.config.js`).
+
+```bash
+npm run format        # format every file
+npm run format:check  # report files that need formatting
+npm run lint          # check for errors
+npm run lint:fix      # fix what ESLint can fix automatically
+```
+
+The whole codebase was reformatted in one commit. To keep `git blame` pointing at real changes, run once per clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Production integrations still required
 
 - Actual Kimish Amazon catalog/product data

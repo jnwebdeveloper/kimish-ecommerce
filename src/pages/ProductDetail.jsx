@@ -5,8 +5,7 @@ import ProductCard from '../components/ProductCard'
 import { Heart, ShieldCheck, Star, Truck } from 'lucide-react'
 
 export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
-  const { products, categories, content_sections, banners, settings, reviews, navigation } =
-    useStore()
+  const { products, reviews } = useStore()
   const { slug } = useParams()
   const navigate = useNavigate()
   const product = products.find((p) => p.slug === slug)
@@ -22,7 +21,7 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
       (p) => p.category !== product.category && p.id !== product.id,
     )
     return [...sameCategory, ...complementary].slice(0, 3)
-  }, [product])
+  }, [product, products])
 
   if (!product)
     return (

@@ -9,6 +9,10 @@ export default [
   { ignores: ['dist', 'node_modules', 'public'] },
   js.configs.recommended,
   {
+    // Allow intentionally unused arguments such as Express's 4-argument error handler (err, req, res, _next)
+    rules: { 'no-unused-vars': ['error', { argsIgnorePattern: '^_' }] },
+  },
+  {
     // Storefront and admin (browser)
     files: ['src/**/*.{js,jsx}'],
     languageOptions: {
@@ -28,6 +32,16 @@ export default [
       'react/prop-types': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
+  },
+  {
+    // Context modules export a provider plus its hook/helpers, and adminPresentation shares constants with
+    // its component; splitting them only to satisfy fast refresh isn't worth it
+    files: [
+      'src/data/StoreContext.jsx',
+      'src/auth/AuthContext.jsx',
+      'src/admin/adminPresentation.jsx',
+    ],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
   {
     // API, Vercel function, scripts and config (Node)
