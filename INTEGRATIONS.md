@@ -13,6 +13,8 @@
 3. Configure a shipment webhook to `https://YOUR-DOMAIN/api/webhooks/shiprocket`. If using a custom secret header, set the same value as `SHIPROCKET_WEBHOOK_SECRET`.
 4. COD orders are sent to Shiprocket after local order creation. Razorpay orders are sent only after payment verification.
 5. Shiprocket ids/status/raw responses are persisted in `shipments`.
+6. Set `SHIPROCKET_PICKUP_PINCODE` so checkout can show courier rate estimates (`POST /api/shipping/rates`). The server re-checks the chosen courier rate when the order is placed.
+7. The `shipping_methods` site setting controls which checkout shipping options appear (comma-separated: `shiprocket,none,inhouse`; default all three). Only `shiprocket` orders are booked with Shiprocket; `inhouse` uses the `shipping_fee`/`free_shipping_threshold` settings and `none` charges nothing.
 
 ## Database
 Run `npm run db:setup` after changing `.env`. It creates/migrates PostgreSQL and seeds storefront content.
