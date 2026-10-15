@@ -14,10 +14,22 @@ export function createShiprocket(env, log) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: env.SHIPROCKET_EMAIL, password: env.SHIPROCKET_PASSWORD }),
     })
-    const d = await r.json()
-    if (!r.ok || !d.token) throw new Error('Shiprocket authentication failed.')
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok || !d.token)
+      // Keep Shiprocket's own status and message for the log (it never echoes the password)
+      throw Object.assign(new Error('Shiprocket authentication failed.'), {
+        providerStatus: r.status,
+        providerMessage: String(d.message || '').slice(0, 200),
+      })
     return d.token
   }
+
+  // Why a Shiprocket call couldn't authenticate, for the logs (no credentials)
+  const loginFailure = (e) => ({
+    reason: e.message,
+    providerStatus: e.providerStatus,
+    providerMessage: e.providerMessage,
+  })
 
   // Shiprocket tokens last 10 days; refresh after 8, or sooner if a call is rejected
   async function token() {
@@ -32,6 +44,7 @@ export function createShiprocket(env, log) {
     try {
       bearer = await token()
     } catch (e) {
+      log.warn('Shiprocket login failed', loginFailure(e))
       throw httpError(503, `${e.message} Check SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD.`)
     }
     const r = await fetch(`${base}/settings/company/pickup`, {
@@ -39,7 +52,13 @@ export function createShiprocket(env, log) {
     })
     const d = await r.json().catch(() => ({}))
     if (r.status === 401) auth = null
-    if (!r.ok) throw httpError(502, 'Could not load pickup addresses from Shiprocket.')
+    if (!r.ok) {
+      log.warn('Shiprocket pickup addresses unavailable', {
+        providerStatus: r.status,
+        providerMessage: String(d.message || '').slice(0, 200),
+      })
+      throw httpError(502, 'Could not load pickup addresses from Shiprocket.')
+    }
     return (d.data?.shipping_address || [])
       .map((a) => ({
         location: String(a.pickup_location || ''),
@@ -53,17 +72,19 @@ export function createShiprocket(env, log) {
 
   // Couriers for a delivery PIN code, cheapest first; [] when none serve it
   async function rates(pincode, weight, cod, settings) {
-    const unavailable = (reason) => {
-      log.warn('Shiprocket rates unavailable', { reason })
+    const unavailable = (details) => {
+      log.warn('Shiprocket rates unavailable', details)
       return httpError(503, 'Shiprocket rates are temporarily unavailable.')
     }
     if (!/^\d{6}$/.test(String(settings.shiprocket_pickup_pincode || '')))
-      throw unavailable('No Shiprocket pickup address is selected in Admin > Site Settings.')
+      throw unavailable({
+        reason: 'No Shiprocket pickup address is selected in Admin > Site Settings.',
+      })
     let bearer
     try {
       bearer = await token()
     } catch (e) {
-      throw unavailable(e.message)
+      throw unavailable(loginFailure(e))
     }
     const q = new URLSearchParams({
       pickup_postcode: settings.shiprocket_pickup_pincode,
