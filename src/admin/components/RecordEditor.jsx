@@ -80,10 +80,7 @@ export default function RecordEditor({
     }
     setBusy(true)
     try {
-      const url = await uploadImage(
-        file,
-        'Image upload failed. Check your Cloudflare R2 CORS settings.',
-      )
+      const url = await uploadImage(file)
       set(field, url)
       setNotice('Image uploaded successfully. Save this record to keep it.')
     } catch (e) {
@@ -172,7 +169,8 @@ export default function RecordEditor({
                           onChange={(e) => uploadField(e.target.files?.[0], f.name)}
                         />
                         <small>
-                          Choose a JPG, PNG, WebP or AVIF image up to 8 MB, or paste an image link.
+                          Choose a JPG, PNG, WebP or AVIF image (up to 4.2 MB on the live site), or
+                          paste an image link.
                         </small>
                         {record[f.name] && (
                           <img

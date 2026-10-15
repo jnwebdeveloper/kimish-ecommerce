@@ -53,7 +53,9 @@ export default function GalleryManager({
         if (!isAllowedImage(file))
           throw new Error(`${file.name}: choose a JPG, PNG, WebP or AVIF file under 8 MB.`)
         setProgress(`Uploading ${done + 1} of ${files.length}: ${file.name}`)
-        const url = await uploadImage(file, `${file.name}: upload failed. Check R2 CORS.`)
+        const url = await uploadImage(file).catch((e) => {
+          throw new Error(`${file.name}: ${e.message}`)
+        })
         await apiRequest(
           '/api/admin/product_images',
           { product_id: productId, image: url, alt: file.name, sort_order: nextOrder + done },

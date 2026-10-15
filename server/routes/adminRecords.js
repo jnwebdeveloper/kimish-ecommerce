@@ -1,5 +1,4 @@
 import express from 'express'
-import { presignImage } from '../integrations/r2.js'
 import { httpError } from '../lib/http.js'
 import { guardSensitive, isPrimaryAdmin } from '../middleware/adminSession.js'
 import { modules } from '../modules.js'
@@ -24,15 +23,6 @@ export function adminRecordRoutes({ pool, env }) {
     if (!isPrimaryAdmin(env, req.admin))
       throw httpError(403, 'Only the primary administrator may view audit logs.')
     res.json((await pool.query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100')).rows)
-  })
-
-  // Signed URL for uploading a product/banner image straight to Cloudflare R2
-  router.post('/images/presign', async (req, res) => {
-    try {
-      res.json(await presignImage(env, req.body || {}))
-    } catch (e) {
-      throw httpError(e.status || 500, e.status ? e.message : 'Could not prepare image upload.')
-    }
   })
 
   router.get('/:module', guard, async (req, res) =>

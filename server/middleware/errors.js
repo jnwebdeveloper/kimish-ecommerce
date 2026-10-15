@@ -7,7 +7,9 @@ const dataConflicts = ['23505', '23503', '23001', '23514', '22P02', '23502']
 export function errorHandler(err, req, res, _next) {
   const conflict = dataConflicts.includes(err.code)
   const status = err.status || (conflict ? 400 : 500)
-  if (status >= 500) req.log.error('request failed', { err })
+  // Unexpected errors get their stack logged; deliberate httpError() responses are already
+  // covered by the request log line (and any detail the route logged itself)
+  if (!err.status && !conflict) req.log.error('request failed', { err })
   else if (conflict) req.log.info('rejected by database constraint', { code: err.code })
   res.status(status).json({
     message: err.status
