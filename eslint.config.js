@@ -31,6 +31,32 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
       'react/prop-types': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // Browser globals that are easy to use by accident when a variable of the same name was meant
+      // (e.g. `navigation` from useStore() missing, which silently became window.navigation).
+      // Use window.<name> when the global really is intended.
+      'no-restricted-globals': [
+        'error',
+        ...[
+          'navigation',
+          'name',
+          'status',
+          'event',
+          'origin',
+          'length',
+          'parent',
+          'top',
+          'self',
+          'close',
+          'open',
+          'stop',
+          'find',
+          'print',
+          'history',
+          'external',
+          'screen',
+          'scroll',
+        ].map((name) => ({ name, message: `Use a local variable, or window.${name} on purpose.` })),
+      ],
     },
   },
   {
