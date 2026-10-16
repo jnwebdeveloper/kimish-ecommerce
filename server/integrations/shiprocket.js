@@ -1,9 +1,10 @@
 import { httpError } from '../lib/http.js'
 
-const base = 'https://apiv2.shiprocket.in/v1/external'
-
 // Shiprocket API: login token (cached per server instance), pickup addresses, courier rates, shipments
 export function createShiprocket(env, log) {
+  // SHIPROCKET_BASE_URL switches between live (default) and sandbox; with or without the /v1/external suffix
+  const root = String(env.SHIPROCKET_BASE_URL || 'https://apiv2.shiprocket.in').trim().replace(/\/+$/, '').replace(/\/v1\/external$/, '')
+  const base = `${root}/v1/external`
   let auth = null
 
   async function login() {
@@ -14,12 +15,17 @@ export function createShiprocket(env, log) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: env.SHIPROCKET_EMAIL, password: env.SHIPROCKET_PASSWORD }),
     })
-    const d = await r.json().catch(() => ({}))
+    const text = await r.text().catch(() => '')
+    let d = {}
+    try {
+      d = JSON.parse(text)
+    } catch {}
     if (!r.ok || !d.token)
-      // Keep Shiprocket's own status and message for the log (it never echoes the password)
-      throw Object.assign(new Error('Shiprocket authentication failed.'), {
+      // Keep Shiprocket's own status and message for the log (it never echoes the password).
+      // A gateway block (e.g. sandbox 498 "Access Denied") answers in plain text, not JSON.
+      throw Object.assign(new Error(`Shiprocket authentication failed (${root}).`), {
         providerStatus: r.status,
-        providerMessage: String(d.message || '').slice(0, 200),
+        providerMessage: String(d.message || text).trim().slice(0, 200),
       })
     return d.token
   }
@@ -29,14 +35,41 @@ export function createShiprocket(env, log) {
     reason: e.message,
     providerStatus: e.providerStatus,
     providerMessage: e.providerMessage,
+    retryAt: e.retryAt,
   })
+
+  // After Shiprocket rejects the credentials, stop retrying for a while: every admin page load and
+  // checkout rate quote would otherwise try again, and Shiprocket blocks the user after repeated
+  // failures. Network errors (no providerStatus) are not remembered. Restarting the server clears it.
+  const cooldownMs = 15 * 60000
+  let rejected = null
 
   // Shiprocket tokens last 10 days; refresh after 8, or sooner if a call is rejected
   async function token() {
     if (auth && auth.until > Date.now()) return auth.token
-    const value = await login()
+    if (rejected && rejected.retryAt > Date.now()) throw rejected
+    let value
+    try {
+      value = await login()
+    } catch (e) {
+      if (e.providerStatus) {
+        e.retryAt = Date.now() + cooldownMs
+        rejected = e
+      }
+      throw e
+    }
+    rejected = null
     auth = { token: value, until: Date.now() + 8 * 864e5 }
     return value
+  }
+
+  // Admin-facing explanation of a failed login, including Shiprocket's reason and the next retry
+  const loginProblem = (e) => {
+    const reason = e.providerMessage ? ` Shiprocket says: "${e.providerMessage}"` : ''
+    const retry = e.retryAt
+      ? ` Login will be retried after ${new Date(e.retryAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST (or restart the server after fixing the credentials).`
+      : ''
+    return `${e.message}${reason} Check SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD (use a Shiprocket API user).${retry}`
   }
 
   async function pickups() {
@@ -45,7 +78,7 @@ export function createShiprocket(env, log) {
       bearer = await token()
     } catch (e) {
       log.warn('Shiprocket login failed', loginFailure(e))
-      throw httpError(503, `${e.message} Check SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD.`)
+      throw httpError(503, loginProblem(e))
     }
     const r = await fetch(`${base}/settings/company/pickup`, {
       headers: { Authorization: `Bearer ${bearer}` },
