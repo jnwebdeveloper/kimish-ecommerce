@@ -147,6 +147,7 @@ MULTIPLE WAYS TO ENJOY: Roast, season, cook or add to desserts. KIMISH Makhana w
     free_shipping_threshold: '499',
     shipping_fee: '79',
     support_phone: '919999999999',
+    support_email: '',
     instagram: '@kimishfoods',
     support_hours: 'Mon–Sat, 10 AM–6 PM',
     footer_description:
