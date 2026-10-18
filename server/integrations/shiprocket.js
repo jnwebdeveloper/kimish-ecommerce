@@ -5,6 +5,10 @@ export function createShiprocket(env, log) {
   // SHIPROCKET_BASE_URL switches between live (default) and sandbox; with or without the /v1/external suffix
   const root = String(env.SHIPROCKET_BASE_URL || 'https://apiv2.shiprocket.in').trim().replace(/\/+$/, '').replace(/\/v1\/external$/, '')
   const base = `${root}/v1/external`
+  // The sandbox gateway answers 498 "Access Denied" unless the request carries the sandbox panel's Referer
+  // (undocumented; observed 2026-10-16). Live ignores it, so it is only sent to sandbox hosts.
+  const sandbox = /sandbox/i.test(new URL(root).hostname)
+  const headers = (extra) => ({ ...(sandbox ? { Referer: 'https://sandbox.shiprocket.in/' } : {}), ...extra })
   let auth = null
 
   async function login() {
@@ -12,7 +16,7 @@ export function createShiprocket(env, log) {
       throw new Error('Shiprocket credentials are not configured.')
     const r = await fetch(`${base}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ email: env.SHIPROCKET_EMAIL, password: env.SHIPROCKET_PASSWORD }),
     })
     const text = await r.text().catch(() => '')
@@ -81,7 +85,7 @@ export function createShiprocket(env, log) {
       throw httpError(503, loginProblem(e))
     }
     const r = await fetch(`${base}/settings/company/pickup`, {
-      headers: { Authorization: `Bearer ${bearer}` },
+      headers: headers({ Authorization: `Bearer ${bearer}` }),
     })
     const d = await r.json().catch(() => ({}))
     if (r.status === 401) auth = null
@@ -126,7 +130,7 @@ export function createShiprocket(env, log) {
       cod: cod ? '1' : '0',
     })
     const r = await fetch(`${base}/courier/serviceability/?${q}`, {
-      headers: { Authorization: `Bearer ${bearer}` },
+      headers: headers({ Authorization: `Bearer ${bearer}` }),
     })
     const d = await r.json().catch(() => ({}))
     if (r.status === 401) auth = null
@@ -147,7 +151,7 @@ export function createShiprocket(env, log) {
   async function createOrder(payload) {
     const r = await fetch(`${base}/orders/create/adhoc`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${await token()}`, 'Content-Type': 'application/json' },
+      headers: headers({ Authorization: `Bearer ${await token()}`, 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     })
     const d = await r.json()
