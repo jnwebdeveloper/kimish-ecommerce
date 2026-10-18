@@ -1,5 +1,5 @@
 import express from 'express'
-import { syncShipmentInBackground } from '../services/shipments.js'
+import { applyTrackingStatus, syncShipmentInBackground } from '../services/shipments.js'
 
 const logEvent = (pool, provider, type, externalId, payload) =>
   pool.query(
@@ -46,31 +46,28 @@ export function webhookRoutes(ctx) {
     res.json({ ok: true })
   })
 
-  router.post('/webhooks/shiprocket', async (req, res) => {
+  // Courier tracking updates. Shiprocket refuses webhook URLs containing words like "shiprocket"
+  // or "sr", so configure https://YOUR-DOMAIN/api/webhooks/courier-updates in Shiprocket; the
+  // older /webhooks/shiprocket path keeps working.
+  const shiprocketWebhook = async (req, res) => {
     const secret = String(req.headers['x-api-key'] || req.headers['x-shiprocket-token'] || '')
     if (env.SHIPROCKET_WEBHOOK_SECRET && secret !== env.SHIPROCKET_WEBHOOK_SECRET)
       return res.sendStatus(401)
     const body = req.body || {}
     const awb = String(body.awb || body.awb_code || '')
-    await logEvent(
-      pool,
-      'shiprocket',
-      String(body.current_status || body.status || 'update'),
+    const status = String(body.current_status || body.shipment_status || body.status || '')
+    await logEvent(pool, 'shiprocket', status || 'update', awb, body)
+    await applyTrackingStatus(pool, {
       awb,
-      body,
-    )
-    if (awb)
-      await pool.query(
-        "UPDATE shipments SET awb_code=$1,status=$2,courier_name=coalesce(nullif($3,''),courier_name),updated_at=now() WHERE awb_code=$1 OR shipment_id=$4",
-        [
-          awb,
-          String(body.current_status || body.status || 'updated'),
-          String(body.courier_name || ''),
-          String(body.shipment_id || ''),
-        ],
-      )
+      shipmentId: body.shipment_id,
+      status,
+      courierName: String(body.courier_name || ''),
+    })
+    // Always 200: Shiprocket disables webhooks that keep failing
     res.json({ ok: true })
-  })
+  }
+  router.post('/webhooks/courier-updates', shiprocketWebhook)
+  router.post('/webhooks/shiprocket', shiprocketWebhook)
 
   return router
 }

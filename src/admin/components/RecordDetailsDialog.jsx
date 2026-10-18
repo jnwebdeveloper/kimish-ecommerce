@@ -9,6 +9,7 @@ export default function RecordDetailsDialog({
   references,
   valueFor,
   readOnly,
+  extras,
   onEdit,
   onClose,
 }) {
@@ -29,6 +30,7 @@ export default function RecordDetailsDialog({
         references={references}
         valueFor={valueFor}
       />
+      {extras}
       <div className="admin-modal-actions">
         <button className="btn btn-outline" onClick={onClose}>
           Close

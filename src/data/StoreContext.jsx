@@ -14,7 +14,10 @@ export async function apiRequest(path, body, method) {
     throw new Error('The server is unavailable. Please try again.')
   }
   if (!response.ok)
-    throw Object.assign(new Error(data.message || 'Request failed.'), { status: response.status })
+    throw Object.assign(new Error(data.message || 'Request failed.'), {
+      status: response.status,
+      code: data.code,
+    })
   return data
 }
 export function StoreProvider({ children }) {

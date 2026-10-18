@@ -72,7 +72,7 @@ export default [
   },
   {
     // API, Vercel function, scripts and config (Node)
-    files: ['server/**/*.js', 'api/**/*.js', '*.config.js'],
+    files: ['server/**/*.js', 'api/**/*.js', 'ops/**/*.mjs', '*.config.js'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: globals.node },
   },
   // Turn off rules that conflict with Prettier formatting

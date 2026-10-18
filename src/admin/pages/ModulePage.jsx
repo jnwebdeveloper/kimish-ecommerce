@@ -19,6 +19,7 @@ import { useAdminSession } from '../session/AdminSession'
 //   validate          (record) => error message that blocks saving
 //   renderEditorExtras  ({ record, busy, setBusy, setError, setNotice, references, reload }) => element
 //   AddDialog         replaces the Add editor: ({ references, onClose, onCreated }) => element
+//   renderDetailsExtras  ({ row, reload }) => element shown in the record details dialog
 export default function ModulePage({
   module,
   help,
@@ -28,6 +29,7 @@ export default function ModulePage({
   validate,
   renderEditorExtras,
   AddDialog,
+  renderDetailsExtras,
 }) {
   const { meta } = useAdminSession()
   const options = moduleOptions[module] || {}
@@ -123,6 +125,7 @@ export default function ModulePage({
           references={references}
           valueFor={valueFor}
           readOnly={options.readOnly}
+          extras={renderDetailsExtras?.({ row: dialog.row, reload })}
           onEdit={() => setDialog({ type: 'edit', row: dialog.row })}
           onClose={close}
         />

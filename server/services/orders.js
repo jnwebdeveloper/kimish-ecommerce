@@ -201,11 +201,12 @@ export async function placeOrder(ctx, body, admin = null) {
         [order.id, total],
       )
     await c.query(
-      "INSERT INTO shipments(order_id,provider,courier_name,status) VALUES($1,$2,$3,'pending') ON CONFLICT(order_id) DO NOTHING",
+      "INSERT INTO shipments(order_id,provider,courier_name,courier_id,status) VALUES($1,$2,$3,$4,'pending') ON CONFLICT(order_id) DO NOTHING",
       [
         order.id,
         method === 'none' || method === 'inhouse' ? method : 'shiprocket',
         quote?.name || '',
+        quote?.id || '',
       ],
     )
     if (admin) await audit(c, admin, 'create', 'orders', order.id)

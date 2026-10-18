@@ -1,3 +1,5 @@
+import { httpError } from '../lib/http.js'
+import { audit } from './audit.js'
 import { loadSettings } from './settings.js'
 
 const money = (n) => Math.round(Number(n || 0) * 100) / 100
@@ -14,7 +16,8 @@ export function shiprocketOrderPayload(order, items, settings = {}, env = {}) {
   return {
     order_id: order.order_number,
     order_date: istDateTime(order.created_at),
-    pickup_location: settings.shiprocket_pickup_location || env.SHIPROCKET_PICKUP_LOCATION || 'Primary',
+    pickup_location:
+      settings.shiprocket_pickup_location || env.SHIPROCKET_PICKUP_LOCATION || 'Primary',
     billing_customer_name: cust.name,
     billing_last_name: '',
     billing_address: cust.address,
@@ -104,4 +107,186 @@ export const syncShipmentInBackground = (ctx, orderId) => {
   syncShipment(ctx, orderId).catch((err) =>
     ctx.log.error('Shiprocket shipment creation failed', { orderId, err }),
   )
+}
+
+// Order statuses in delivery order; tracking updates only ever move an order forward
+const ORDER_STAGES = ['Confirmed', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered']
+
+// Maps a courier status from Shiprocket (webhook or tracking API) to an order status, or null
+// when it doesn't change the order (e.g. "AWB Assigned", "Out For Pickup", RTO, cancellations)
+export function orderStageFor(courierStatus) {
+  const s = String(courierStatus || '').toUpperCase()
+  if (!s || /RTO|RETURN|CANCEL|LOST|DAMAGE|DESTROY|UNDELIVERED|NOT DELIVERED/.test(s)) return null
+  if (/DELIVERED/.test(s)) return 'Delivered'
+  if (/OUT FOR DELIVERY/.test(s)) return 'Out for Delivery'
+  if (/PICKED UP|IN TRANSIT|SHIPPED|REACHED|DISPATCH|DESTINATION|HUB/.test(s)) return 'Shipped'
+  return null
+}
+
+// Moves the order forward to `stage` (never backwards, never out of Cancelled)
+async function advanceOrder(db, orderId, stage) {
+  if (!stage) return
+  await db.query(
+    `UPDATE orders SET status=$2 WHERE id=$1 AND status<>'Cancelled'
+       AND array_position($3::text[], status) < array_position($3::text[], $2::text)`,
+    [orderId, stage, ORDER_STAGES],
+  )
+}
+
+// Records a courier status from the Shiprocket webhook or a tracking refresh, and moves the
+// order along. Matches the shipment by AWB, falling back to Shiprocket's shipment id.
+export async function applyTrackingStatus(
+  pool,
+  { awb, shipmentId, status, courierName, trackUrl },
+) {
+  if (!status || (!awb && !shipmentId)) return null
+  const delivered = orderStageFor(status) === 'Delivered'
+  const row = (
+    await pool.query(
+      `UPDATE shipments SET status=$3::text, courier_name=coalesce(nullif($4::text,''),courier_name),
+         tracking_url=coalesce(nullif($5::text,''),tracking_url),
+         awb_code=CASE WHEN awb_code='' THEN $1::text ELSE awb_code END,
+         delivered_at=CASE WHEN $6::boolean THEN coalesce(delivered_at,now()) ELSE delivered_at END, updated_at=now()
+       WHERE ($1::text<>'' AND awb_code=$1::text) OR ($2::text<>'' AND shipment_id=$2::text)
+       RETURNING order_id`,
+      [awb || '', String(shipmentId || ''), status, courierName || '', trackUrl || '', delivered],
+    )
+  ).rows[0]
+  if (row) await advanceOrder(pool, row.order_id, orderStageFor(status))
+  return row?.order_id ?? null
+}
+
+const SHIPMENT_FIELDS = [
+  'provider',
+  'status',
+  'provider_order_id',
+  'shipment_id',
+  'courier_id',
+  'courier_name',
+  'awb_code',
+  'label_url',
+  'tracking_url',
+  'pickup_scheduled_at',
+  'delivered_at',
+  'booking_error',
+  'updated_at',
+]
+
+// What the admin shipment panel shows for an order
+export async function shipmentDetails(pool, orderId) {
+  const row = (
+    await pool.query(
+      `SELECT ${SHIPMENT_FIELDS.map((f) => 's.' + f).join(',')},
+         o.status order_status,o.payment,o.payment_status,o.total
+       FROM orders o LEFT JOIN shipments s ON s.order_id=o.id WHERE o.id=$1`,
+      [orderId],
+    )
+  ).rows[0]
+  if (!row) throw httpError(404, 'Order not found.')
+  return row
+}
+
+// The admin "Ship" button: makes sure the Shiprocket order exists, books the courier the
+// customer chose (AWB), requests pickup and fetches the label. Each finished step is saved
+// straight away, so pressing Ship again after a failure continues where it stopped.
+// anyCourier lets Shiprocket choose when the chosen courier can no longer take the parcel.
+export async function shipOrder(ctx, orderId, admin, { anyCourier = false } = {}) {
+  const { pool, shiprocket } = ctx
+  const lock = await pool.connect()
+  try {
+    // One Ship at a time per order (double clicks, two admins)
+    const { locked } = (await lock.query('SELECT pg_try_advisory_lock(7467, $1) locked', [orderId]))
+      .rows[0]
+    if (!locked) throw httpError(409, 'This order is already being shipped. Refresh in a moment.')
+    try {
+      let s = await shipmentDetails(pool, orderId)
+      if (s.provider !== 'shiprocket')
+        throw httpError(400, 'This order is not shipped with Shiprocket.')
+      if (s.order_status === 'Cancelled') throw httpError(400, 'This order is cancelled.')
+      if (s.payment !== 'cod' && s.payment_status !== 'Paid')
+        throw httpError(400, 'Online orders can be shipped only after payment.')
+      const save = (sql, params) =>
+        pool.query(
+          `UPDATE shipments SET ${sql},booking_error='',updated_at=now() WHERE order_id=$1`,
+          [orderId, ...params],
+        )
+      try {
+        if (!s.provider_order_id) {
+          await syncShipment(ctx, orderId)
+          s = await shipmentDetails(pool, orderId)
+          if (!s.provider_order_id) throw new Error('The Shiprocket order could not be created.')
+        }
+        if (!s.awb_code) {
+          const chosen = anyCourier ? '' : s.courier_id
+          let booked
+          try {
+            booked = await shiprocket.assignAwb(s.shipment_id, chosen)
+          } catch (e) {
+            throw Object.assign(e, { courierUnavailable: Boolean(chosen) })
+          }
+          await save(
+            "awb_code=$2::text,courier_id=$3::text,courier_name=coalesce(nullif($4::text,''),courier_name),status='awb_assigned'",
+            [booked.awb, booked.courierId, booked.courierName],
+          )
+          await pool.query('UPDATE orders SET tracking_number=$2::text WHERE id=$1', [
+            orderId,
+            booked.awb,
+          ])
+          s = await shipmentDetails(pool, orderId)
+        }
+        if (!s.pickup_scheduled_at) {
+          const { scheduledAt } = await shiprocket.requestPickup(s.shipment_id)
+          const when = scheduledAt && !Number.isNaN(Date.parse(scheduledAt)) ? scheduledAt : null
+          await save(
+            "pickup_scheduled_at=coalesce($2::timestamptz,now()),status='pickup_scheduled'",
+            [when],
+          )
+        }
+        if (!s.label_url) {
+          const { labelUrl } = await shiprocket.generateLabel(s.shipment_id)
+          await save('label_url=$2::text', [labelUrl])
+        }
+        await advanceOrder(pool, orderId, 'Packed')
+        await audit(pool, admin, 'ship', 'orders', orderId)
+      } catch (e) {
+        if (e.status) throw e
+        await pool.query(
+          'UPDATE shipments SET booking_error=$2::text,updated_at=now() WHERE order_id=$1',
+          [orderId, e.message],
+        )
+        ctx.log?.warn('Shiprocket booking failed', { orderId, reason: e.message })
+        throw httpError(
+          502,
+          e.courierUnavailable
+            ? `${s.courier_name || 'The chosen courier'} could not be booked. ${e.message}`
+            : e.message,
+          e.courierUnavailable ? { code: 'courier_unavailable' } : undefined,
+        )
+      }
+      return shipmentDetails(pool, orderId)
+    } finally {
+      await lock.query('SELECT pg_advisory_unlock(7467, $1)', [orderId])
+    }
+  } finally {
+    lock.release()
+  }
+}
+
+// Fetches the latest courier status for a booked shipment and applies it like a webhook would
+export async function refreshTracking(ctx, orderId) {
+  const s = await shipmentDetails(ctx.pool, orderId)
+  if (!s.awb_code) throw httpError(400, 'Ship the order first; it has no tracking number yet.')
+  let t
+  try {
+    t = await ctx.shiprocket.track(s.awb_code)
+  } catch (e) {
+    throw httpError(502, e.message)
+  }
+  if (t.status)
+    await applyTrackingStatus(ctx.pool, { awb: s.awb_code, status: t.status, trackUrl: t.trackUrl })
+  return {
+    shipment: await shipmentDetails(ctx.pool, orderId),
+    activities: t.activities,
+    note: t.error,
+  }
 }

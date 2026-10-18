@@ -1,4 +1,5 @@
 import CreateOrderDialog from '../components/CreateOrderDialog'
+import ShipmentPanel from '../components/ShipmentPanel'
 import ModulePage from './ModulePage'
 
 export default function OrdersPage() {
@@ -14,6 +15,9 @@ export default function OrdersPage() {
       })}
       // "Add order" opens the manual order form; Edit still changes status, payment and tracking
       AddDialog={CreateOrderDialog}
+      renderDetailsExtras={({ row, reload }) => (
+        <ShipmentPanel orderId={row.id} onChange={reload} />
+      )}
     />
   )
 }
