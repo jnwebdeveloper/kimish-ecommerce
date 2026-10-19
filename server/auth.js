@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto'
+import { createLogger } from './lib/logger.js'
 
 export const normalizePhone = (value) => {
   const digits = String(value || '').replace(/[\s()-]/g, '')
@@ -87,6 +88,7 @@ export function createAuthHandler({
   fetchImpl = fetch,
   now = Date.now,
   pool,
+  log = createLogger(env),
 } = {}) {
   const sessions = new Map(),
     store = pool ? databaseStore(pool) : memoryStore(now)
@@ -117,6 +119,14 @@ export function createAuthHandler({
     )
     const data = await response.json()
     if (!response.ok) {
+      // Twilio's own error code explains most refusals (e.g. 21608: a trial account can only
+      // text verified numbers; 20003: wrong credentials); it never contains the phone or token
+      log.warn('Twilio Verify request refused', {
+        step: path,
+        providerStatus: response.status,
+        providerCode: data.code,
+        providerMessage: String(data.message || '').slice(0, 200),
+      })
       if (response.status === 429 || data.code === 60202)
         throw fail(429, 'Too many attempts. Please request a new code later.')
       if (response.status === 404)
@@ -245,6 +255,9 @@ export function createAuthHandler({
       ])
       return send(200, { user: { phone: challenge.phone } })
     } catch (error) {
+      // Unexpected failures (database, network) reach the customer only as a generic message,
+      // so record the cause for the server logs
+      if (!error.status) log.error('Phone verification failed', { path, err: error })
       return send(error.status || 502, {
         message: error.status
           ? error.message
