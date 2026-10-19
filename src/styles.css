@@ -3855,3 +3855,6 @@ textarea:focus-visible {
 .shipping-rates .error {
   margin: 0;
 }
+.payment-options label.static {
+  cursor: default;
+}

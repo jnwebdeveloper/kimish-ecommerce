@@ -149,7 +149,14 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
       items: [{ variantId: variant, qty: 2 }],
       couponCode: 'QATEST',
     }
-    result = await call('/api/orders', order)
+    // The storefront takes only online payment with a Shiprocket courier; COD orders are
+    // created by an admin (same stock, coupon and pricing rules)
+    assert.equal((await call('/api/orders', order, null, false)).status, 400)
+    assert.equal(
+      (await call('/api/orders', { ...order, payment: 'razorpay' }, null, false)).status,
+      400,
+    )
+    result = await call('/api/admin/create/order', order)
     assert.equal(result.status, 201, JSON.stringify(result))
     assert.equal(result.data.total, 269)
     const number = result.data.id
@@ -172,7 +179,12 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
     )
     assert.equal((await call('/api/track', { orderId: number, mobile: '9000000002' })).status, 404)
     assert.equal(
-      (await call('/api/orders', { ...order, items: [{ variantId: variant, qty: 99 }] })).status,
+      (
+        await call('/api/admin/create/order', {
+          ...order,
+          items: [{ variantId: variant, qty: 99 }],
+        })
+      ).status,
       400,
     )
     assert.equal((await call('/api/orders', { ...order, payment: 'upi' })).status, 400)

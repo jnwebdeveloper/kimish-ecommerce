@@ -3,26 +3,20 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { apiRequest, useStore } from '../data/StoreContext'
 import { validateDelivery } from '../data/deliveryValidation'
-import {
-  CreditCard,
-  Home,
-  MapPin,
-  Package,
-  PackageCheck,
-  ShieldCheck,
-  Smartphone,
-  Truck,
-} from 'lucide-react'
+import { CreditCard, MapPin, Package, ShieldCheck, Smartphone } from 'lucide-react'
+
+// The storefront ships only with Shiprocket and takes only online payment (Razorpay)
+const payment = 'razorpay'
+const shippingMethod = 'shiprocket'
 
 export default function Checkout({ cart, clearCart }) {
   const navigate = useNavigate()
-  const { settings, coupons, refresh } = useStore()
+  const { coupons, refresh } = useStore()
   const location = useLocation()
   const couponCode = location.state?.couponCode || ''
   const [error, setError] = useState(''),
     [fieldErrors, setFieldErrors] = useState({}),
     [busy, setBusy] = useState(false)
-  const [payment, setPayment] = useState('razorpay')
   const [form, setForm] = useState({
     name: '',
     mobile: '',
@@ -33,15 +27,6 @@ export default function Checkout({ cart, clearCart }) {
     city: '',
     state: '',
   })
-  const methods = useMemo(() => {
-    const list = String(settings.shipping_methods || 'shiprocket,none,inhouse')
-      .split(',')
-      .map((m) => m.trim())
-      .filter((m) => ['shiprocket', 'none', 'inhouse'].includes(m))
-    return list.length ? list : ['inhouse']
-  }, [settings.shipping_methods])
-  const [chosenMethod, setShippingMethod] = useState('')
-  const shippingMethod = methods.includes(chosenMethod) ? chosenMethod : methods[0]
   const [rates, setRates] = useState({ key: '', couriers: [] }),
     [courierId, setCourierId] = useState(''),
     [ratesBusy, setRatesBusy] = useState(false),
@@ -50,20 +35,11 @@ export default function Checkout({ cart, clearCart }) {
     () => cart.reduce((sum, item) => sum + item.variant.price * item.qty, 0),
     [cart],
   )
-  // Rates depend on pincode, cart weight and COD; a quote is only usable while all three are unchanged.
-  const ratesKey = `${form.pincode}|${payment}|${cart.map((i) => `${i.variant.id}:${i.qty}`).join(',')}`
+  // Rates depend on pincode and cart weight; a quote is only usable while both are unchanged.
+  const ratesKey = `${form.pincode}|${cart.map((i) => `${i.variant.id}:${i.qty}`).join(',')}`
   const ratesFresh = rates.key === ratesKey
   const courier = ratesFresh ? rates.couriers.find((c) => c.id === courierId) : undefined
-  const inhouseShipping =
-    subtotal >= Number(settings.free_shipping_threshold || 499) || subtotal === 0
-      ? 0
-      : Number(settings.shipping_fee || 79)
-  const shipping =
-    shippingMethod === 'none'
-      ? 0
-      : shippingMethod === 'inhouse'
-        ? inhouseShipping
-        : (courier?.rate ?? 0)
+  const shipping = courier?.rate ?? 0
   const coupon = coupons[couponCode]
   const discount =
     coupon && subtotal >= coupon.minCart
@@ -104,7 +80,7 @@ export default function Checkout({ cart, clearCart }) {
       setRates({ key, couriers: data.couriers })
       setCourierId(data.couriers[0]?.id || '')
       if (!data.couriers.length)
-        setRatesError('No couriers deliver to this PIN code. Try another shipping method.')
+        setRatesError('No couriers deliver to this PIN code. Please check the PIN code.')
     } catch (error) {
       setRatesError(error.message)
     } finally {
@@ -121,10 +97,10 @@ export default function Checkout({ cart, clearCart }) {
       setError('Please correct the highlighted delivery fields.')
       return
     }
-    if (shippingMethod === 'shiprocket' && !courier) {
+    if (!courier) {
       setError(
         rates.couriers.length && !ratesFresh
-          ? 'Your PIN code, cart or payment method changed. Check shipping rates again.'
+          ? 'Your PIN code or cart changed. Check shipping rates again.'
           : 'Check shipping rates and choose a courier.',
       )
       return
@@ -132,7 +108,7 @@ export default function Checkout({ cart, clearCart }) {
     setBusy(true)
     setError('')
     try {
-      if (payment === 'razorpay' && !window.Razorpay)
+      if (!window.Razorpay)
         throw new Error('Razorpay checkout could not be loaded. Please refresh and try again.')
       const order = await apiRequest('/api/orders', {
         customer: form,
@@ -143,51 +119,49 @@ export default function Checkout({ cart, clearCart }) {
         items: cart.map((i) => ({ variantId: i.variant.id, qty: i.qty })),
         couponCode,
       })
-      if (payment === 'razorpay') {
-        let failure = ''
-        await new Promise((resolve, reject) => {
-          const checkout = new window.Razorpay({
-            key: order.razorpay.keyId,
-            order_id: order.razorpay.orderId,
-            amount: order.razorpay.amount,
-            currency: order.razorpay.currency,
-            name: order.razorpay.name,
-            description: order.razorpay.description,
-            prefill: { name: form.name, email: form.email, contact: form.mobile },
-            theme: { color: '#55723f' },
-            handler: async (response) => {
-              try {
-                await apiRequest('/api/payments/razorpay/verify', {
-                  orderNumber: order.id,
-                  ...response,
-                })
-                resolve()
-              } catch (e) {
-                reject(e)
-              }
+      let failure = ''
+      await new Promise((resolve, reject) => {
+        const checkout = new window.Razorpay({
+          key: order.razorpay.keyId,
+          order_id: order.razorpay.orderId,
+          amount: order.razorpay.amount,
+          currency: order.razorpay.currency,
+          name: order.razorpay.name,
+          description: order.razorpay.description,
+          prefill: { name: form.name, email: form.email, contact: form.mobile },
+          theme: { color: '#55723f' },
+          handler: async (response) => {
+            try {
+              await apiRequest('/api/payments/razorpay/verify', {
+                orderNumber: order.id,
+                ...response,
+              })
+              resolve()
+            } catch (e) {
+              reject(e)
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              apiRequest('/api/payments/razorpay/cancel', {
+                orderNumber: order.id,
+                razorpay_order_id: order.razorpay.orderId,
+              })
+                .then(() => refresh())
+                .catch(() => {})
+              reject(
+                new Error(
+                  `${failure || 'Payment was cancelled.'} Your order has not been placed and you have not been charged.`,
+                ),
+              )
             },
-            modal: {
-              ondismiss: () => {
-                apiRequest('/api/payments/razorpay/cancel', {
-                  orderNumber: order.id,
-                  razorpay_order_id: order.razorpay.orderId,
-                })
-                  .then(() => refresh())
-                  .catch(() => {})
-                reject(
-                  new Error(
-                    `${failure || 'Payment was cancelled.'} Your order has not been placed and you have not been charged.`,
-                  ),
-                )
-              },
-            },
-          })
-          checkout.on('payment.failed', (r) => {
-            failure = r.error?.description || 'Payment failed.'
-          })
-          checkout.open()
+          },
         })
-      }
+        checkout.on('payment.failed', (r) => {
+          failure = r.error?.description || 'Payment failed.'
+        })
+        checkout.open()
+      })
       trackCommerce('Purchase', {
         value: Number(order.total),
         currency: 'INR',
@@ -197,7 +171,7 @@ export default function Checkout({ cart, clearCart }) {
       })
       clearCart()
       navigate('/order-confirmation', {
-        state: { order: { ...order, payment_status: payment === 'razorpay' ? 'Paid' : 'Unpaid' } },
+        state: { order: { ...order, payment_status: 'Paid' } },
       })
       refresh().catch(() => {})
     } catch (error) {
@@ -226,8 +200,7 @@ export default function Checkout({ cart, clearCart }) {
         <span className="eyebrow">GUEST CHECKOUT</span>
         <h1>Complete your order</h1>
         <p>
-          No account needed. Enter your delivery details, pick a shipping method and choose how you
-          would like to pay.
+          No account needed. Enter your delivery details, choose a courier and pay securely online.
         </p>
       </div>
       <div className="checkout-steps">
@@ -357,117 +330,63 @@ export default function Checkout({ cart, clearCart }) {
               <Package />
               <div>
                 <span className="eyebrow">STEP 2</span>
-                <h3>Shipping Method</h3>
+                <h3>Shipping</h3>
               </div>
             </div>
-            <div className="payment-options">
-              {methods.includes('shiprocket') && (
-                <label className={shippingMethod === 'shiprocket' ? 'selected' : ''}>
-                  <input
-                    type="radio"
-                    name="shippingMethod"
-                    value="shiprocket"
-                    checked={shippingMethod === 'shiprocket'}
-                    onChange={(e) => setShippingMethod(e.target.value)}
-                  />
-                  <Truck />
-                  <span>
-                    <strong>Shiprocket — Sandbox rates</strong>
-                    <small>Sandbox estimates · no booking</small>
-                  </span>
-                </label>
+            <div className="shipping-rates">
+              <div className="secure-note">
+                <ShieldCheck size={20} />
+                <span>
+                  Check courier rates for your delivery PIN code and choose the courier you prefer.
+                  Delivery is handled through Shiprocket.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={checkRates}
+                disabled={ratesBusy}
+              >
+                {ratesBusy ? 'Checking rates…' : 'Check shipping rates'}
+              </button>
+              <small className="shipping-hint">
+                Enter your pincode, then check shipping rates. Check again after changing quantity
+                or pincode.
+              </small>
+              {ratesError && (
+                <p role="alert" className="error">
+                  {ratesError}
+                </p>
               )}
-              {methods.includes('none') && (
-                <label className={shippingMethod === 'none' ? 'selected' : ''}>
-                  <input
-                    type="radio"
-                    name="shippingMethod"
-                    value="none"
-                    checked={shippingMethod === 'none'}
-                    onChange={(e) => setShippingMethod(e.target.value)}
-                  />
-                  <PackageCheck />
-                  <span>
-                    <strong>No Shipping Required</strong>
-                  </span>
-                </label>
+              {rates.couriers.length > 0 && !ratesFresh && (
+                <p role="status" className="error">
+                  Your PIN code or cart changed. Check shipping rates again.
+                </p>
               )}
-              {methods.includes('inhouse') && (
-                <label className={shippingMethod === 'inhouse' ? 'selected' : ''}>
-                  <input
-                    type="radio"
-                    name="shippingMethod"
-                    value="inhouse"
-                    checked={shippingMethod === 'inhouse'}
-                    onChange={(e) => setShippingMethod(e.target.value)}
-                  />
-                  <Home />
-                  <span>
-                    <strong>In-house Shipping</strong>
-                    <small>Rate set by admin</small>
-                  </span>
-                </label>
-              )}
-            </div>
-            {shippingMethod === 'shiprocket' && (
-              <div className="shipping-rates">
-                <div className="secure-note">
-                  <ShieldCheck size={20} />
-                  <span>
-                    Check sandbox courier amounts using your delivery pincode and product weight.
-                    Final charges may change with packed dimensions and weight. This only retrieves
-                    estimates; it does not book a shipment.
-                  </span>
+              {ratesFresh && rates.couriers.length > 0 && (
+                <div className="payment-options">
+                  {rates.couriers.map((c) => (
+                    <label key={c.id} className={courierId === c.id ? 'selected' : ''}>
+                      <input
+                        type="radio"
+                        name="courier"
+                        value={c.id}
+                        checked={courierId === c.id}
+                        onChange={(e) => setCourierId(e.target.value)}
+                      />
+                      <span>
+                        <strong>
+                          {c.name} · ₹{c.rate}
+                        </strong>
+                        {(c.etd || c.days) && (
+                          <small>{c.etd ? `Estimated delivery ${c.etd}` : `${c.days} days`}</small>
+                        )}
+                      </span>
+                    </label>
+                  ))}
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={checkRates}
-                  disabled={ratesBusy}
-                >
-                  {ratesBusy ? 'Checking rates…' : 'Check shipping rates'}
-                </button>
-                <small className="shipping-hint">
-                  Enter your pincode, then check shipping rates. Check again after changing quantity
-                  or pincode.
-                </small>
-                {ratesError && (
-                  <p role="alert" className="error">
-                    {ratesError}
-                  </p>
-                )}
-                {rates.couriers.length > 0 && !ratesFresh && (
-                  <p role="status" className="error">
-                    Your PIN code, cart or payment method changed. Check shipping rates again.
-                  </p>
-                )}
-                {ratesFresh && rates.couriers.length > 0 && (
-                  <div className="payment-options">
-                    {rates.couriers.map((c) => (
-                      <label key={c.id} className={courierId === c.id ? 'selected' : ''}>
-                        <input
-                          type="radio"
-                          name="courier"
-                          value={c.id}
-                          checked={courierId === c.id}
-                          onChange={(e) => setCourierId(e.target.value)}
-                        />
-                        <span>
-                          <strong>
-                            {c.name} · ₹{c.rate}
-                          </strong>
-                          {(c.etd || c.days) && (
-                            <small>
-                              {c.etd ? `Estimated delivery ${c.etd}` : `${c.days} days`}
-                            </small>
-                          )}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </section>
 
           <section className="checkout-card">
@@ -475,45 +394,21 @@ export default function Checkout({ cart, clearCart }) {
               <CreditCard />
               <div>
                 <span className="eyebrow">STEP 3</span>
-                <h3>Payment method</h3>
+                <h3>Payment</h3>
               </div>
             </div>
             <div className="payment-options">
-              <label className={payment === 'razorpay' ? 'selected' : ''}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="razorpay"
-                  checked={payment === 'razorpay'}
-                  onChange={(e) => setPayment(e.target.value)}
-                />
+              <label className="selected static">
                 <Smartphone />
                 <span>
                   <strong>Pay Online</strong>
                   <small>UPI, cards, net banking & wallets via Razorpay</small>
                 </span>
               </label>
-              <label className={payment === 'cod' ? 'selected' : ''}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="cod"
-                  checked={payment === 'cod'}
-                  onChange={(e) => setPayment(e.target.value)}
-                />
-                <Truck />
-                <span>
-                  <strong>Cash on Delivery</strong>
-                  <small>Pay when your order arrives</small>
-                </span>
-              </label>
             </div>
             <div className="secure-note">
               <ShieldCheck size={20} />
-              <span>
-                Online payments are securely processed by Razorpay. Cash on Delivery remains
-                available.
-              </span>
+              <span>Online payments are securely processed by Razorpay.</span>
             </div>
           </section>
         </div>
@@ -540,15 +435,7 @@ export default function Checkout({ cart, clearCart }) {
           </div>
           <div className="summary-line">
             <span>Shipping</span>
-            <strong>
-              {shippingMethod === 'shiprocket' && !courier
-                ? 'Check rates'
-                : shipping
-                  ? `₹${shipping}`
-                  : shippingMethod === 'none'
-                    ? 'Not required'
-                    : 'Free'}
-            </strong>
+            <strong>{!courier ? 'Check rates' : shipping ? `₹${shipping}` : 'Free'}</strong>
           </div>
           {discount > 0 && (
             <div className="summary-line">
@@ -566,7 +453,7 @@ export default function Checkout({ cart, clearCart }) {
             </p>
           )}
           <button disabled={busy} className="btn btn-primary full" type="submit">
-            {busy ? 'Placing order…' : payment === 'cod' ? 'Place Order' : `Pay ₹${total}`}
+            {busy ? 'Placing order…' : `Pay ₹${total}`}
           </button>
           <small>By placing your order, you agree to the shipping and food-product policies.</small>
         </aside>

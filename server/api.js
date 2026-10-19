@@ -33,7 +33,7 @@ export function createApi(env, overrides = {}) {
     origin,
     log,
     razorpay: createRazorpay(env),
-    shiprocket: createShiprocket(env, log),
+    shiprocket: overrides.shiprocket ?? createShiprocket(env, log),
     storage: overrides.storage ?? createStorage(env, log),
     // In-memory request counters for admin login, password reset and public checkout limits
     attempts: new Map(),

@@ -20,7 +20,15 @@ export function checkoutRoutes(ctx) {
     next()
   })
 
-  router.post('/orders', async (req, res) => res.status(201).json(await placeOrder(ctx, req.body)))
+  // The storefront sells only with online payment and Shiprocket delivery; Cash on Delivery and
+  // other shipping methods remain available to manual orders created in the admin panel
+  router.post('/orders', async (req, res) => {
+    const body = req.body || {}
+    if (body.payment !== 'razorpay') throw httpError(400, 'Only online payment is available.')
+    if (body.shippingMethod !== 'shiprocket')
+      throw httpError(400, 'Check shipping rates and choose a courier.')
+    res.status(201).json(await placeOrder(ctx, body))
+  })
 
   router.post('/shipping/rates', async (req, res) => {
     const { pincode, items, payment } = req.body || {}

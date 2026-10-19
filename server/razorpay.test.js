@@ -31,7 +31,12 @@ test('Razorpay checkout: abandoned payments restore stock, verified payments are
     if (u.includes('/v1/payments/')) return reply(razorpay.payment)
     throw new Error('Unexpected Razorpay call ' + u)
   }
-  const { api, pool } = createApi(env),
+  // Storefront orders need a Shiprocket courier quote; a fake keeps the test offline
+  const shiprocket = {
+    rates: async () => [{ id: '7', name: 'QA Courier', rate: 40, etd: '', days: '3' }],
+    createOrder: async () => ({ order_id: 1, shipment_id: 2 }),
+  }
+  const { api, pool } = createApi(env, { shiprocket }),
     server = api.listen(0, '127.0.0.1')
   await new Promise((r) => server.once('listening', r))
   const base = `http://127.0.0.1:${server.address().port}`
@@ -99,6 +104,9 @@ test('Razorpay checkout: abandoned payments restore stock, verified payments are
         pincode: '123456',
       },
       payment: 'razorpay',
+      shippingMethod: 'shiprocket',
+      courierId: '7',
+      shippingQuote: 40,
       items: [{ variantId: variant, qty: 3 }],
     }
 
