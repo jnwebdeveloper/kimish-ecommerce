@@ -1,3 +1,5 @@
+import { SlidersHorizontal, RotateCcw, ChevronDown, X } from 'lucide-react'
+import './ShopFilters.css'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ProductCard from '../components/ProductCard'
@@ -52,6 +54,19 @@ export default function Shop({ query, ...props }) {
     setParams(next)
   }
 
+  const priceLabel = (value) => `₹${value.toLocaleString('en-IN')}`
+  function resetFilters() {
+    setWeight('All')
+    setMaxPrice(2000)
+    updateCategory('All')
+  }
+  function updateSort(value) {
+    setSort(value)
+    const next = new URLSearchParams(params)
+    value === 'featured' ? next.delete('sort') : next.set('sort', value)
+    setParams(next)
+  }
+
   return (
     <main className="section page-top shop-page">
       <div className="page-title">
@@ -59,51 +74,144 @@ export default function Shop({ query, ...props }) {
         <h1>Shop Kimish</h1>
         <p>Explore premium nuts, dry fruits and seeds across pack sizes.</p>
       </div>
-      <section className="filters filters-horizontal filter-panel" aria-label="Product filters">
-        <div className="filter-heading">
-          <span>REFINE YOUR PICKS</span>
-          <h3>Find your favourites</h3>
-          <p>Filter the collection by category, pack size and price.</p>
+      <section className="collection-filters" aria-label="Product filters">
+        <div className="collection-filter-header">
+          <div className="collection-filter-intro">
+            <span className="collection-filter-icon" aria-hidden="true">
+              <SlidersHorizontal size={24} strokeWidth={1.6} />
+            </span>
+            <div>
+              <h2>Find your favourites</h2>
+              <p>Discover the right fit for your pantry.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="collection-reset"
+            onClick={resetFilters}
+            disabled={category === 'All' && weight === 'All' && maxPrice === 2000}
+          >
+            <RotateCcw size={16} aria-hidden="true" /> Reset filters
+          </button>
         </div>
-        <label className="filter-control">
-          <span>Category</span>
-          <select value={category} onChange={(e) => updateCategory(e.target.value)}>
-            <option>All</option>
-            {['Nuts', 'Seeds', 'Dried Fruits', 'Everyday Favourite', 'Roasted Items'].map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-        <label className="filter-control">
-          <span>Pack Size</span>
-          <select value={weight} onChange={(e) => setWeight(e.target.value)}>
-            {['All', '100g', '200g', '250g', '500g', '1kg'].map((w) => (
-              <option key={w}>{w}</option>
-            ))}
-          </select>
-        </label>
-        <label className="price-filter filter-control">
-          <span>
-            Maximum price <b>₹{maxPrice}</b>
-          </span>
-          <input
-            type="range"
-            min="200"
-            max="2000"
-            step="100"
-            value={maxPrice}
-            onChange={(e) => setMaxPrice(+e.target.value)}
-          />
-          <small>
-            ₹200 <em>₹2,000</em>
-          </small>
-        </label>
+        <div className="collection-filter-grid">
+          <label className="collection-control">
+            <span>Category</span>
+            <span className="collection-select">
+              <select value={category} onChange={(e) => updateCategory(e.target.value)}>
+                <option value="All">All categories</option>
+                {['Nuts', 'Seeds', 'Dried Fruits', 'Everyday Favourite', 'Roasted Items'].map(
+                  (c) => (
+                    <option key={c}>{c}</option>
+                  ),
+                )}
+                {![
+                  'All',
+                  'Nuts',
+                  'Seeds',
+                  'Dried Fruits',
+                  'Everyday Favourite',
+                  'Roasted Items',
+                ].includes(category) && <option value={category}>{category}</option>}
+              </select>
+              <ChevronDown size={18} aria-hidden="true" />
+            </span>
+          </label>
+          <label className="collection-control">
+            <span>Pack size</span>
+            <span className="collection-select">
+              <select value={weight} onChange={(e) => setWeight(e.target.value)}>
+                <option value="All">All sizes</option>
+                {['100g', '200g', '250g', '500g', '1kg'].map((w) => (
+                  <option key={w}>{w}</option>
+                ))}
+              </select>
+              <ChevronDown size={18} aria-hidden="true" />
+            </span>
+          </label>
+          <div className="collection-control collection-price">
+            <div className="collection-price-label">
+              <label htmlFor="collection-price">Price range</label>
+              <output htmlFor="collection-price">
+                Up to <b>{priceLabel(maxPrice)}</b>
+              </output>
+            </div>
+            <input
+              id="collection-price"
+              aria-label="Maximum price"
+              aria-valuetext={priceLabel(maxPrice)}
+              type="range"
+              min="200"
+              max="2000"
+              step="100"
+              value={maxPrice}
+              style={{ '--range-progress': `${((maxPrice - 200) / 1800) * 100}%` }}
+              onChange={(e) => setMaxPrice(+e.target.value)}
+            />
+            <div className="collection-price-limits" aria-hidden="true">
+              <span>₹200</span>
+              <span>₹2,000</span>
+            </div>
+          </div>
+        </div>
       </section>
       <section className="shop-products">
-        <div className="shop-toolbar">
-          <span>
-            <b>{filtered.length}</b> {filtered.length === 1 ? 'product' : 'products'}
-          </span>
+        <div className="collection-toolbar">
+          <div className="collection-results">
+            <span className="collection-count" aria-live="polite">
+              <b>{filtered.length}</b> {filtered.length === 1 ? 'product' : 'products'}
+            </span>
+            {category !== 'All' && (
+              <button
+                type="button"
+                className="collection-chip"
+                aria-label={`Remove category filter ${category}`}
+                onClick={() => updateCategory('All')}
+              >
+                {category}
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+            {weight !== 'All' && (
+              <button
+                type="button"
+                className="collection-chip"
+                aria-label={`Remove pack size filter ${weight}`}
+                onClick={() => setWeight('All')}
+              >
+                {weight}
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+            {maxPrice < 2000 && (
+              <button
+                type="button"
+                className="collection-chip"
+                aria-label="Remove price filter"
+                onClick={() => setMaxPrice(2000)}
+              >
+                Up to {priceLabel(maxPrice)}
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <label className="collection-sort">
+            <span>Sort by:</span>
+            <span className="collection-select">
+              <select
+                aria-label="Sort products"
+                value={sort}
+                onChange={(e) => updateSort(e.target.value)}
+              >
+                <option value="featured">Recommended</option>
+                <option value="popular">Most popular</option>
+                <option value="price-low">Price: low to high</option>
+                <option value="price-high">Price: high to low</option>
+                <option value="new">Newest arrivals</option>
+              </select>
+              <ChevronDown size={16} aria-hidden="true" />
+            </span>
+          </label>
         </div>
         <div className="product-grid">
           {filtered.map((p) => (
