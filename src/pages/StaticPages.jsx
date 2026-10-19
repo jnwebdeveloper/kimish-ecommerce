@@ -1,3 +1,4 @@
+import About from './About'
 import { useState } from 'react'
 import { useStore, apiRequest } from '../data/StoreContext'
 import { Link, useParams } from 'react-router-dom'
@@ -94,6 +95,7 @@ export function Policy({ pageSlug }) {
   const { pages, settings } = useStore(),
     { slug } = useParams()
   const page = pages.find((p) => p.slug === (pageSlug || slug || 'policy'))
+  if (page?.slug === 'about-us') return <About page={page} />
   return (
     <main className="section page-top policy-page">
       <div className="page-title">
