@@ -49,10 +49,10 @@ export default function ShipmentPanel({ orderId, onChange }) {
       () => apiRequest(`/api/admin/orders/${orderId}/ship`, { anyCourier }),
       'Courier booked, pickup requested and label ready.',
     )
-    if (d) {
-      setS(d)
-      onChange?.()
-    } else load()
+    if (d) setS(d)
+    // A failed Ship may still have saved progress (e.g. the AWB before the label failed)
+    else await load()
+    onChange?.()
   }
   const track = async () => {
     const d = await run('track', () =>
@@ -121,6 +121,13 @@ export default function ShipmentPanel({ orderId, onChange }) {
           </div>
         ))}
       </dl>
+      {booked && (s.booking_error || error) && (
+        <p className="admin-module-help">
+          Courier booked: {s.courier_name || 'courier'}, AWB <b>{s.awb_code}</b>. The steps after
+          booking (label, pickup) did not finish; Retry shipping continues from there without
+          booking again.
+        </p>
+      )}
       {s.booking_error && !error && (
         <p role="alert" className="error">
           Last booking attempt failed: {s.booking_error}

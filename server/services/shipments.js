@@ -186,6 +186,38 @@ export async function shipmentDetails(pool, orderId) {
   return row
 }
 
+// No courier chosen (older/manual orders, or "Ship with any courier"): try the couriers that serve
+// the delivery PIN code, cheapest first, until one books. Leaving the choice to Shiprocket picks
+// the account default, which may not be bookable for this parcel.
+const COURIER_ATTEMPTS = 3
+async function bookCheapestCourier({ pool, env, shiprocket }, orderId, shipmentId) {
+  const order = (await pool.query('SELECT * FROM orders WHERE id=$1', [orderId])).rows[0]
+  const items = (
+    await pool.query(
+      'SELECT oi.*,v.weight_kg,v.length_cm,v.breadth_cm,v.height_cm FROM order_items oi LEFT JOIN variants v ON v.id=oi.variant_id WHERE oi.order_id=$1',
+      [orderId],
+    )
+  ).rows
+  const settings = await loadSettings(pool)
+  const { weight } = shiprocketOrderPayload(order, items, settings, env)
+  const couriers = await shiprocket.rates(
+    order.customer_snapshot.pincode,
+    weight,
+    order.payment === 'cod',
+    settings,
+  )
+  if (!couriers.length) throw new Error('No courier serves this PIN code.')
+  const failures = []
+  for (const c of couriers.slice(0, COURIER_ATTEMPTS)) {
+    try {
+      return await shiprocket.assignAwb(shipmentId, c.id)
+    } catch (e) {
+      failures.push(`${c.name}: ${e.message.replace(/^Shiprocket: /, '')}`)
+    }
+  }
+  throw new Error(`Shiprocket: no courier could be booked (${failures.join('; ')}).`)
+}
+
 // The admin "Ship" button: makes sure the Shiprocket order exists, books the courier the
 // customer chose (AWB), requests pickup and fetches the label. Each finished step is saved
 // straight away, so pressing Ship again after a failure continues where it stopped.
@@ -219,11 +251,13 @@ export async function shipOrder(ctx, orderId, admin, { anyCourier = false } = {}
         if (!s.awb_code) {
           const chosen = anyCourier ? '' : s.courier_id
           let booked
-          try {
-            booked = await shiprocket.assignAwb(s.shipment_id, chosen)
-          } catch (e) {
-            throw Object.assign(e, { courierUnavailable: Boolean(chosen) })
-          }
+          if (chosen) {
+            try {
+              booked = await shiprocket.assignAwb(s.shipment_id, chosen)
+            } catch (e) {
+              throw Object.assign(e, { courierUnavailable: true })
+            }
+          } else booked = await bookCheapestCourier(ctx, orderId, s.shipment_id)
           await save(
             "awb_code=$2::text,courier_id=$3::text,courier_name=coalesce(nullif($4::text,''),courier_name),status='awb_assigned'",
             [booked.awb, booked.courierId, booked.courierName],
@@ -234,6 +268,12 @@ export async function shipOrder(ctx, orderId, admin, { anyCourier = false } = {}
           ])
           s = await shipmentDetails(pool, orderId)
         }
+        // Label before pickup: the label only needs the AWB, so a failing pickup request
+        // doesn't stop the parcel being packed and labelled
+        if (!s.label_url) {
+          const { labelUrl } = await shiprocket.generateLabel(s.shipment_id)
+          await save('label_url=$2::text', [labelUrl])
+        }
         if (!s.pickup_scheduled_at) {
           const { scheduledAt } = await shiprocket.requestPickup(s.shipment_id)
           const when = scheduledAt && !Number.isNaN(Date.parse(scheduledAt)) ? scheduledAt : null
@@ -241,10 +281,6 @@ export async function shipOrder(ctx, orderId, admin, { anyCourier = false } = {}
             "pickup_scheduled_at=coalesce($2::timestamptz,now()),status='pickup_scheduled'",
             [when],
           )
-        }
-        if (!s.label_url) {
-          const { labelUrl } = await shiprocket.generateLabel(s.shipment_id)
-          await save('label_url=$2::text', [labelUrl])
         }
         await advanceOrder(pool, orderId, 'Packed')
         await audit(pool, admin, 'ship', 'orders', orderId)

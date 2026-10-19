@@ -156,11 +156,11 @@ test('Courier statuses map to order stages; returns and cancellations never adva
   assert.equal(orderStageFor('Canceled'), null)
 })
 
-test('Ship books the chosen courier, requests pickup, gets the label and tracks to Delivered', async () => {
+test('Ship books the chosen courier, gets the label, requests pickup and tracks to Delivered', async () => {
   const pool = createPool({ ...loadEnv('development', process.cwd(), ''), ...process.env })
   const admin = (await pool.query('SELECT id FROM admins ORDER BY id LIMIT 1')).rows[0]
   const ids = []
-  const addOrder = async (suffix) => {
+  const addOrder = async (suffix, courierId = '10') => {
     const o = (
       await pool.query(
         "INSERT INTO orders(order_number,payment,payment_status,subtotal,total,customer_snapshot) VALUES($1,'cod','Unpaid',100,100,$2) RETURNING id",
@@ -168,22 +168,26 @@ test('Ship books the chosen courier, requests pickup, gets the label and tracks 
       )
     ).rows[0]
     await pool.query(
-      "INSERT INTO shipments(order_id,provider,status,provider_order_id,shipment_id,courier_id,courier_name) VALUES($1,'shiprocket','created',$2,$3,'10','Delhivery')",
-      [o.id, `9${o.id}`, `8${o.id}`],
+      "INSERT INTO shipments(order_id,provider,status,provider_order_id,shipment_id,courier_id,courier_name) VALUES($1,'shiprocket','created',$2,$3,$4,'Delhivery')",
+      [o.id, `9${o.id}`, `8${o.id}`, courierId],
     )
     ids.push(o.id)
     return o.id
   }
   const calls = []
+  const names = { 10: 'Delhivery', 20: 'Cheap Courier', 30: 'Xpressbees', 40: 'Ekart' }
   const fake = (overrides = {}) => ({
+    // Couriers serving the PIN code, cheapest first
+    rates: async () => [
+      { id: '20', name: names[20], rate: 30 },
+      { id: '30', name: names[30], rate: 40 },
+      { id: '40', name: names[40], rate: 50 },
+    ],
     assignAwb: async (shipmentId, courierId) => {
       calls.push(['awb', courierId])
-      if (overrides.chosenFails && courierId) throw new Error('Shiprocket: courier not serviceable')
-      return {
-        awb: `AWB${shipmentId}`,
-        courierId: courierId || '99',
-        courierName: courierId ? 'Delhivery' : 'Xpressbees',
-      }
+      if ((overrides.failing || []).includes(courierId))
+        throw new Error('Shiprocket: courier not serviceable')
+      return { awb: `AWB${shipmentId}`, courierId, courierName: names[courierId] }
     },
     requestPickup: async () => {
       calls.push(['pickup'])
@@ -203,10 +207,10 @@ test('Ship books the chosen courier, requests pickup, gets the label and tracks 
   })
   try {
     assert.ok(admin, 'tests need an admin account (npm run db:setup)')
-    // Happy path: chosen courier, pickup, label; order becomes Packed
+    // Happy path: chosen courier, label, pickup; order becomes Packed
     const a = await addOrder('A')
     let s = await shipOrder({ pool, shiprocket: fake() }, a, admin)
-    assert.deepEqual(calls.splice(0), [['awb', '10'], ['pickup'], ['label']])
+    assert.deepEqual(calls.splice(0), [['awb', '10'], ['label'], ['pickup']])
     assert.equal(s.awb_code, `AWB8${a}`)
     assert.equal(s.order_status, 'Packed')
     assert.equal(s.label_url, 'https://example.test/label.pdf')
@@ -237,17 +241,44 @@ test('Ship books the chosen courier, requests pickup, gets the label and tracks 
     assert.equal(done.status, 'Delivered')
     assert.ok(done.delivered_at)
 
-    // Chosen courier unavailable: clear error with a code, then "any courier" books another
+    // Chosen courier unavailable: clear error with a code, then "any courier" tries the
+    // serviceable couriers cheapest first and books the first that accepts
     const b = await addOrder('B')
     await assert.rejects(
-      shipOrder({ pool, shiprocket: fake({ chosenFails: true }) }, b, admin),
+      shipOrder({ pool, shiprocket: fake({ failing: ['10'] }) }, b, admin),
       (e) => e.status === 502 && e.details?.code === 'courier_unavailable',
     )
-    s = await shipOrder({ pool, shiprocket: fake() }, b, admin, { anyCourier: true })
+    calls.splice(0)
+    s = await shipOrder({ pool, shiprocket: fake({ failing: ['10', '20'] }) }, b, admin, {
+      anyCourier: true,
+    })
+    assert.deepEqual(
+      calls.filter((c) => c[0] === 'awb'),
+      [
+        ['awb', '20'],
+        ['awb', '30'],
+      ],
+    )
     assert.equal(s.courier_name, 'Xpressbees')
+    assert.equal(s.courier_id, '30')
     assert.equal(s.booking_error, '')
 
-    // A failed pickup keeps the AWB; Ship again continues from pickup without re-booking
+    // No courier saved (older or manual order): the cheapest serviceable courier is booked,
+    // never Shiprocket's account default
+    calls.splice(0)
+    const d = await addOrder('D', '')
+    s = await shipOrder({ pool, shiprocket: fake() }, d, admin)
+    assert.deepEqual(calls[0], ['awb', '20'])
+    assert.equal(s.courier_name, 'Cheap Courier')
+
+    // Every candidate refused: the error lists each courier's reason
+    const e = await addOrder('E', '')
+    await assert.rejects(
+      shipOrder({ pool, shiprocket: fake({ failing: ['20', '30', '40'] }) }, e, admin),
+      (err) => err.status === 502 && /Cheap Courier: .*Xpressbees: .*Ekart: /.test(err.message),
+    )
+
+    // A failed pickup keeps the AWB and label; Ship again only retries the pickup
     calls.splice(0)
     const c = await addOrder('C')
     await assert.rejects(shipOrder({ pool, shiprocket: fake({ pickupFails: true }) }, c, admin))
@@ -258,7 +289,7 @@ test('Ship books the chosen courier, requests pickup, gets the label and tracks 
     )
     calls.splice(0)
     await shipOrder({ pool, shiprocket: fake() }, c, admin)
-    assert.deepEqual(calls, [['pickup'], ['label']])
+    assert.deepEqual(calls, [['pickup']])
   } finally {
     if (ids.length) {
       await pool.query("DELETE FROM audit_logs WHERE action='ship' AND record_id=ANY($1)", [

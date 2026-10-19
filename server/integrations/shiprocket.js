@@ -198,10 +198,13 @@ export function createShiprocket(env, log) {
       shipment_id: Number(shipmentId),
       ...(courierId ? { courier_id: Number(courierId) } : {}),
     })
-    const data = d.response?.data || {}
+    // On failure Shiprocket puts its reason in response.data as plain text, e.g.
+    // "Error in generating awb with bluedart [BD-003]. Please contact support."
+    const raw = d.response?.data
+    const data = raw && typeof raw === 'object' ? raw : {}
     if (d.awb_assign_status !== 1 || !data.awb_code)
       throw new Error(
-        `Shiprocket: ${data.awb_assign_error || d.message || 'the courier could not be assigned.'}`,
+        `Shiprocket: ${data.awb_assign_error || (typeof raw === 'string' && raw) || d.message || 'the courier could not be assigned.'}`,
       )
     return {
       awb: String(data.awb_code),

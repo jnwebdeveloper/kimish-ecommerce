@@ -42,6 +42,10 @@ export default function ModulePage({
   // Open dialog: { type: 'add' | 'edit' | 'view' | 'delete', row }
   const [dialog, setDialog] = useState(null)
   const close = () => setDialog(null)
+  // The details dialog shows the freshest copy of its record, so a reload (e.g. after Ship saves
+  // a tracking number) updates it instead of leaving the values from when it was opened
+  const viewRow =
+    dialog?.type === 'view' ? rows.find((r) => r.id === dialog.row.id) || dialog.row : null
   const done = (message) => {
     setDialog(null)
     setNotice(message)
@@ -121,11 +125,11 @@ export default function ModulePage({
           module={module}
           moduleMeta={moduleMeta}
           title={title}
-          row={dialog.row}
+          row={viewRow}
           references={references}
           valueFor={valueFor}
           readOnly={options.readOnly}
-          extras={renderDetailsExtras?.({ row: dialog.row, reload })}
+          extras={renderDetailsExtras?.({ row: viewRow, reload })}
           onEdit={() => setDialog({ type: 'edit', row: dialog.row })}
           onClose={close}
         />
