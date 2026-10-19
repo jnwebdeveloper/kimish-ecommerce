@@ -90,16 +90,40 @@ export function TrackOrder() {
   )
 }
 
-export function Policy() {
-  const { pages } = useStore(),
+export function Policy({ pageSlug }) {
+  const { pages, settings } = useStore(),
     { slug } = useParams()
-  const page = pages.find((p) => p.slug === (slug || 'policy'))
+  const page = pages.find((p) => p.slug === (pageSlug || slug || 'policy'))
   return (
     <main className="section page-top policy-page">
       <div className="page-title">
         <span className="eyebrow">CUSTOMER CARE</span>
-        <h1>{page?.title || 'Page not found'}</h1>
+        <h1>
+          {page?.title ||
+            { 'terms-and-conditions': 'Terms & Conditions', 'privacy-policy': 'Privacy Policy' }[
+              pageSlug
+            ] ||
+            'Page not found'}
+        </h1>
       </div>
+      {!page && (
+        <p>This page is not currently published. Please contact our support team for assistance.</p>
+      )}
+      {page?.slug === 'contact-us' && (
+        <div className="policy-content">
+          {settings.support_email && (
+            <p>
+              Email: <a href={`mailto:${settings.support_email}`}>{settings.support_email}</a>
+            </p>
+          )}
+          {settings.support_phone && (
+            <p>
+              Phone: <a href={`tel:${settings.support_phone}`}>{settings.support_phone}</a>
+            </p>
+          )}
+          {settings.support_hours && <p>{settings.support_hours}</p>}
+        </div>
+      )}
       {page && (
         <div className="policy-content" style={{ whiteSpace: 'pre-wrap' }}>
           {page.content}

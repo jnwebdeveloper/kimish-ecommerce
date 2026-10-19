@@ -9,6 +9,7 @@ import OrdersPage from './pages/OrdersPage'
 import OverviewPage from './pages/OverviewPage'
 import ProductsPage from './pages/ProductsPage'
 import SettingsPage from './pages/SettingsPage'
+import PixelPage from './pages/PixelPage'
 import { AdminSessionProvider, RequireAdmin } from './session/AdminSession'
 import './admin-base.css'
 import './admin.css'
@@ -65,6 +66,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             {/* Screens with their own page; every other screen uses the generic ModulePage */}
             <Route path="products" element={<ProductsPage />} />
             <Route path="orders" element={<OrdersPage />} />
+            <Route path="pixel" element={<PixelPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path=":slug" element={<ModuleRoute />} />
             <Route path="*" element={<NotFoundPage />} />

@@ -32,3 +32,9 @@ CREATE TABLE IF NOT EXISTS auth_rate_limits (key text PRIMARY KEY, count integer
 CREATE INDEX IF NOT EXISTS payments_order_idx ON payments(order_id);
 CREATE INDEX IF NOT EXISTS shipments_order_idx ON shipments(order_id);
 CREATE INDEX IF NOT EXISTS integration_events_provider_idx ON integration_events(provider,created_at);
+
+CREATE TABLE IF NOT EXISTS seo_pages (
+  id serial PRIMARY KEY, path text UNIQUE NOT NULL, title text NOT NULL,
+  description text NOT NULL DEFAULT '', image text NOT NULL DEFAULT '',
+  noindex boolean NOT NULL DEFAULT false, active boolean NOT NULL DEFAULT true
+);

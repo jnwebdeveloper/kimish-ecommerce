@@ -1,3 +1,4 @@
+import StoreImage from './StoreImage'
 import { Heart, Plus, Star } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -19,7 +20,7 @@ export default function ProductCard({ product, addToCart, toggleWishlist, isWish
           <Heart size={20} fill={isWishlisted ? 'currentColor' : 'none'} />
         </button>
         <Link to={`/product/${product.slug}`}>
-          <img src={product.images[0]} alt={`${product.name} ${variant.weight}`} />
+          <StoreImage src={product.images[0]} alt={`${product.name} ${variant.weight}`} />
         </Link>
       </div>
       <div className="product-info">

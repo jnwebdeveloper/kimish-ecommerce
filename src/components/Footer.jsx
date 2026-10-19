@@ -30,6 +30,10 @@ export default function Footer() {
         </div>
         <div>
           <h4>Customer Care</h4>
+          <Link to="/about-us">About Us</Link>
+          <Link to="/contact-us">Contact Us</Link>
+          <Link to="/terms-and-conditions">Terms &amp; Conditions</Link>
+          <Link to="/privacy-policy">Privacy Policy</Link>
           <Link to="/track-order">Track Order</Link>
           <Link to="/policy">Shipping & No Returns</Link>
           <Link to="/wishlist">Wishlist</Link>

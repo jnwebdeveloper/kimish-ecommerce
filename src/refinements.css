@@ -2837,3 +2837,18 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* Single-image gifts use the whole gallery, without reserving a thumbnail column. */
+.app .detail-gallery {
+  min-width: 0;
+}
+.app .detail-gallery-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app .detail-main-image {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Account from './pages/Account'
 import { useStore } from './data/StoreContext'
+import { trackCommerce } from './data/pixel'
 import { useAuth } from './auth/AuthContext'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -74,14 +75,13 @@ export default function App() {
       if (idx >= 0) return prev.map((i, n) => (n === idx ? { ...i, qty: i.qty + 1 } : i))
       return [...prev, { product, variant, qty: 1 }]
     })
-    if (window.fbq)
-      window.fbq('track', 'AddToCart', {
-        content_ids: [String(product.id)],
-        content_name: product.name,
-        content_type: 'product',
-        value: Number(variant.price),
-        currency: 'INR',
-      })
+    trackCommerce('AddToCart', {
+      content_ids: [String(product.id)],
+      content_name: product.name,
+      content_type: 'product',
+      value: Number(variant.price),
+      currency: 'INR',
+    })
   }
 
   function updateQty(item, qty) {
@@ -138,6 +138,11 @@ export default function App() {
         <Route path="/order-confirmation" element={<OrderConfirmation />} />
         <Route path="/offers" element={<Offers />} />
         <Route path="/track-order" element={<TrackOrder />} />
+        <Route path="/about-us" element={<Policy pageSlug="about-us" />} />
+        <Route path="/contact-us" element={<Policy pageSlug="contact-us" />} />
+        <Route path="/terms-and-conditions" element={<Policy pageSlug="terms-and-conditions" />} />
+        <Route path="/privacy-policy" element={<Policy pageSlug="privacy-policy" />} />
+        <Route path="/pages/contact" element={<Policy pageSlug="contact-us" />} />
         <Route path="/pages/:slug" element={<Policy />} />
         <Route path="/policy" element={<Policy />} />
       </Routes>

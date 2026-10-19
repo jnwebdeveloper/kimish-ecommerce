@@ -250,6 +250,9 @@ MULTIPLE WAYS TO ENJOY: Roast, season, cook or add to desserts. KIMISH Makhana w
   await client.query(
     "INSERT INTO pages(slug,title,content) VALUES ('policy','Shipping & No Returns Policy','Shipping across India is subject to courier serviceability.\n\nDue to the nature of food products, returns are not accepted. Contact support about damaged, missing or incorrect items.') ON CONFLICT(slug) DO NOTHING",
   )
+  await client.query(
+    await readFile(new URL('./migrations/20261015_website_content.sql', import.meta.url), 'utf8'),
+  )
   await client.query('COMMIT')
   console.log(
     'PostgreSQL schema and seed data ready. Admin credentials are in ADMIN_CREDENTIALS.local.md.',

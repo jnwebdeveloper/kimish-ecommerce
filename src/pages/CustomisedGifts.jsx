@@ -1,3 +1,4 @@
+import StoreImage from '../components/StoreImage'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowRight, Gift, Sparkles, ShieldCheck, Truck } from 'lucide-react'
 import { useStore } from '../data/StoreContext'
@@ -19,7 +20,7 @@ export default function CustomisedGifts() {
           <article className="gift-list-card" key={g.id}>
             <div className="gift-list-image">
               <Link to={`/customised-gifts/${g.slug}`}>
-                <img src={g.image} alt={g.name} />
+                <StoreImage src={g.image} alt={g.name} />
               </Link>
               <span>{g.occasion}</span>
             </div>
@@ -68,8 +69,8 @@ export function GiftDetail() {
   return (
     <main className="section page-top">
       <div className="product-detail">
-        <div className="detail-gallery">
-          <img className="detail-main-image" src={g.image} alt={g.name} />
+        <div className="detail-gallery detail-gallery-single">
+          <StoreImage className="detail-main-image" src={g.image} alt={g.name} />
         </div>
         <div className="detail-info">
           <span className="eyebrow">{g.occasion || 'CUSTOMISED GIFTING'}</span>

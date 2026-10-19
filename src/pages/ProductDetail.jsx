@@ -1,3 +1,4 @@
+import StoreImage from '../components/StoreImage'
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../data/StoreContext'
@@ -48,11 +49,20 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
                 key={`${img}-${i}`}
                 onClick={() => setImageIndex(i)}
               >
-                <img src={img} alt={`${product.name} view ${i + 1}`} />
+                <StoreImage src={img} alt={`${product.name} view ${i + 1}`} />
               </button>
             ))}
           </div>
-          <img className="detail-main-image" src={product.images[imageIndex]} alt={product.name} />
+          <StoreImage
+            className="detail-main-image"
+            src={
+              product.images[imageIndex] ||
+              product.images[0] ||
+              product.image ||
+              '/image-placeholder.svg'
+            }
+            alt={product.name}
+          />
         </div>
 
         <div className="detail-info">

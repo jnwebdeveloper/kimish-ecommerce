@@ -3,6 +3,8 @@ import { labelFor } from './adminPresentation'
 // List of records with View / Edit / Delete actions (Edit and Delete hidden when read-only)
 export default function RecordTable({
   rows,
+  sort,
+  onSort,
   columns,
   moduleMeta,
   valueFor,
@@ -11,15 +13,32 @@ export default function RecordTable({
   onEdit,
   onDelete,
 }) {
+  const heading = (key) => (
+    <th
+      key={key}
+      aria-sort={
+        sort?.key === key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'
+      }
+    >
+      {key === 'image' ? (
+        labelFor(key, moduleMeta)
+      ) : (
+        <button className="admin-sort-heading" onClick={() => onSort(key)}>
+          {key === 'id' ? 'ID' : labelFor(key, moduleMeta)}{' '}
+          <span aria-hidden="true">
+            {sort?.key === key ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </button>
+      )}
+    </th>
+  )
   return (
     <div className="admin-table-wrap">
       <table className="admin-table">
         <thead>
           <tr>
-            <th>ID</th>
-            {columns.map((c) => (
-              <th key={c}>{labelFor(c, moduleMeta)}</th>
-            ))}
+            {heading('id')}
+            {columns.map(heading)}
             <th>Actions</th>
           </tr>
         </thead>

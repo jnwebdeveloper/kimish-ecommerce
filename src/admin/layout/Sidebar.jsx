@@ -11,7 +11,13 @@ export default function Sidebar() {
         <div className="admin-menu-group" key={group.label}>
           <span>{group.label}</span>
           {group.items
-            .filter(([key]) => key === 'overview' || key === 'audit' || meta[key])
+            .filter(
+              ([key]) =>
+                key === 'overview' ||
+                key === 'audit' ||
+                (key === 'pixel' && meta.settings) ||
+                meta[key],
+            )
             .map(([key, label]) => (
               <NavLink key={key} to={pathFor(key)} end>
                 {label}

@@ -6,6 +6,17 @@ const f = (name, label, type = 'text', required = false, options) => ({
   options,
 })
 export const modules = {
+  seo_pages: {
+    label: 'SEO Pages',
+    fields: [
+      f('path', 'Website path (for example /shop)', 'text', true),
+      f('title', 'SEO title', 'text', true),
+      f('description', 'Meta description', 'textarea'),
+      f('image', 'Social sharing image URL'),
+      f('noindex', 'Hide from search engines', 'boolean'),
+      f('active', 'Published', 'boolean'),
+    ],
+  },
   products: {
     label: 'Products',
     fields: [
@@ -229,7 +240,12 @@ export function validate(module, body, creating) {
       if (!Number.isFinite(v) || v < 0)
         throw new Error(`${field.label} must be a non-negative number.`)
     } else v = String(v ?? '').trim()
-    if (field.required && (v === '' || v === null)) throw new Error(`${field.label} is required.`)
+    const optionalSetting =
+      module === 'settings' &&
+      field.name === 'value' &&
+      ['meta_pixel_id', 'seo_description', 'seo_title'].includes(body.key)
+    if (field.required && !optionalSetting && (v === '' || v === null))
+      throw new Error(`${field.label} is required.`)
     if (field.options && !field.options.includes(v)) throw new Error(`Invalid ${field.label}.`)
     if (String(v).length > 20000) throw new Error('Field is too long.')
     if (['image', 'link', 'url'].includes(field.name) && v && !/^(\/(?!\/)|https?:\/\/)/i.test(v))
@@ -276,5 +292,14 @@ export function validate(module, body, creating) {
     (!Number.isFinite(Number(result.value)) || Number(result.value) < 0)
   )
     throw new Error('Shipping amounts must be non-negative numbers.')
+  if (module === 'seo_pages' && !/^\/(?!\/)[^?#\s]*$/.test(result.path))
+    throw new Error('Enter a website path starting with /, without a query or fragment.')
+  if (
+    module === 'settings' &&
+    result.key === 'meta_pixel_id' &&
+    result.value &&
+    !/^\d{5,30}$/.test(result.value)
+  )
+    throw new Error('Enter a numeric Meta Pixel ID, or leave it blank to disable tracking.')
   return result
 }

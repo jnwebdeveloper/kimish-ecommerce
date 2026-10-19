@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { listColumns, singular } from '../components/adminPresentation'
+import { labelFor, listColumns, singular } from '../components/adminPresentation'
 import DeleteDialog from '../components/DeleteDialog'
 import Messages from '../components/Messages'
 import RecordDetailsDialog from '../components/RecordDetailsDialog'
@@ -37,6 +37,9 @@ export default function ModulePage({
   const title = options.title || moduleMeta?.label || menuLabel(module)
   usePageTitle(title)
   const { rows, references, error, reload } = useModuleData(module)
+  const [filterField, setFilterField] = useState('')
+  const [filterValue, setFilterValue] = useState('')
+  const [sort, setSort] = useState({ key: '', direction: 'asc' })
   const [search, setSearch] = useState(''),
     [notice, setNotice] = useState('')
   // Open dialog: { type: 'add' | 'edit' | 'view' | 'delete', row }
@@ -55,9 +58,48 @@ export default function ModulePage({
   // formatters and fieldOverrides may be functions of the loaded reference lists
   const withReferences = (value) => (typeof value === 'function' ? value(references) : value)
   const valueFor = makeFieldValue(moduleMeta, references, withReferences(formatters))
-  const filtered = rows.filter((row) =>
-    JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
+  const columns = listColumns[module] || []
+  const filterColumns = ['id', ...columns.filter((key) => key !== 'image')]
+  const displayValue = (row, key) => {
+    if (typeof row[key] === 'boolean')
+      return row[key] ? (key === 'active' ? 'Published' : 'Yes') : key === 'active' ? 'Draft' : 'No'
+    const value = valueFor(row, key)
+    return typeof value === 'string' || typeof value === 'number' ? value : String(row[key] ?? '')
+  }
+  const filterValues = [...new Set(rows.map((row) => String(displayValue(row, filterField))))].sort(
+    (a, b) => a.localeCompare(b, undefined, { numeric: true }),
   )
+  const filtered = rows
+    .filter(
+      (row) =>
+        JSON.stringify(row).toLowerCase().includes(search.toLowerCase()) &&
+        (!filterField || !filterValue || String(displayValue(row, filterField)) === filterValue),
+    )
+    .sort((a, b) => {
+      if (!sort.key) return 0
+      const av = a[sort.key],
+        bv = b[sort.key]
+      const numeric =
+        moduleMeta?.fields.find((field) => field.name === sort.key)?.type === 'number' ||
+        ['id', 'price_range', 'inventory', 'total'].includes(sort.key)
+      const numberFor = (row) =>
+        ['price_range', 'inventory'].includes(sort.key)
+          ? parseFloat(String(displayValue(row, sort.key)).replaceAll(',', '').replace(/^₹/, '')) ||
+            0
+          : Number(row[sort.key]) || 0
+      const result = sort.key.endsWith('_at')
+        ? new Date(av).getTime() - new Date(bv).getTime()
+        : numeric
+          ? numberFor(a) - numberFor(b)
+          : typeof av === 'number' && typeof bv === 'number'
+            ? av - bv
+            : String(displayValue(a, sort.key)).localeCompare(
+                String(displayValue(b, sort.key)),
+                undefined,
+                { numeric: true, sensitivity: 'base' },
+              )
+      return (sort.direction === 'asc' ? result : -result) || a.id - b.id
+    })
   const helpText = help || options.help
 
   return (
@@ -73,6 +115,48 @@ export default function ModulePage({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <select
+          aria-label="Filter column"
+          value={filterField}
+          onChange={(e) => {
+            setFilterField(e.target.value)
+            setFilterValue('')
+          }}
+        >
+          <option value="">All records</option>
+          {filterColumns.map((key) => (
+            <option key={key} value={key}>
+              {labelFor(key, moduleMeta)}
+            </option>
+          ))}
+        </select>
+        {filterField && (
+          <select
+            aria-label="Filter value"
+            value={filterValue}
+            onChange={(e) => setFilterValue(e.target.value)}
+          >
+            <option value="">All values</option>
+            {filterValues.filter(Boolean).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        )}
+        {(search || filterField || sort.key) && (
+          <button
+            className="btn btn-outline"
+            onClick={() => {
+              setSearch('')
+              setFilterField('')
+              setFilterValue('')
+              setSort({ key: '', direction: 'asc' })
+            }}
+          >
+            Clear
+          </button>
+        )}
         {!options.readOnly && (
           <button
             className="btn btn-primary"
@@ -89,7 +173,11 @@ export default function ModulePage({
       <p>{filtered.length} records</p>
       <RecordTable
         rows={filtered}
-        columns={listColumns[module] || []}
+        columns={columns}
+        sort={sort}
+        onSort={(key) =>
+          setSort({ key, direction: sort.key === key && sort.direction === 'asc' ? 'desc' : 'asc' })
+        }
         moduleMeta={moduleMeta}
         valueFor={valueFor}
         readOnly={options.readOnly}

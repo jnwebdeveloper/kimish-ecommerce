@@ -1,4 +1,5 @@
 export const singular = {
+  seo_pages: 'SEO page',
   products: 'product',
   category_groups: 'category group',
   categories: 'category',
@@ -17,6 +18,7 @@ export const singular = {
   admins: 'administrator',
 }
 export const listColumns = {
+  seo_pages: ['title', 'path', 'description', 'active'],
   products: ['image', 'name', 'category_id', 'price_range', 'inventory', 'active'],
   category_groups: ['name', 'sort_order', 'active'],
   categories: ['image', 'name', 'group_id', 'parent_id', 'active'],
@@ -37,6 +39,7 @@ export const listColumns = {
 }
 export const labelFor = (key, meta) =>
   ({
+    id: 'ID',
     price_range: 'Price',
     inventory: 'Stock',
     customer_snapshot: 'Delivery details',

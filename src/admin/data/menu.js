@@ -26,6 +26,8 @@ export const menu = [
       ['banners', 'Banners'],
       ['content_sections', 'Homepage Sections'],
       ['pages', 'Pages & Policies'],
+      ['seo_pages', 'SEO Pages'],
+      ['pixel', 'Meta Pixel'],
       ['navigation', 'Menu Management'],
       ['reviews', 'Product Reviews'],
     ],
@@ -67,6 +69,12 @@ export const referenceKeys = new Set(Object.values(referencesFor).flat())
 
 // Options for screens that use the generic page
 export const moduleOptions = {
+  seo_pages: {
+    help: 'Set the search title, description and sharing image for any website path, such as /, /shop or /about-us.',
+  },
+  pages: {
+    help: 'Edit About Us (about-us), Contact Us (contact-us), Terms & Conditions (terms-and-conditions) and Privacy Policy (privacy-policy). Publish a page to make it visible on the website.',
+  },
   navigation: {
     help: 'Manage additional header and footer links: choose the label, destination, display order and whether to open in a new tab. Collection menus are managed through Categories.',
     hiddenFields: ['parent_id', 'menu_type'],

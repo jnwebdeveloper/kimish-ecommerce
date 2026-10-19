@@ -31,7 +31,15 @@ export async function storeCatalog(pool) {
       'SELECT c.*,coalesce(g.name,c.group_name) group_name FROM categories c LEFT JOIN category_groups g ON g.id=c.group_id WHERE c.active=true ORDER BY c.id',
     )
   ).rows
-  for (const m of ['coupons', 'banners', 'pages', 'navigation', 'content_sections', 'gift_boxes'])
+  for (const m of [
+    'coupons',
+    'banners',
+    'pages',
+    'navigation',
+    'content_sections',
+    'gift_boxes',
+    'seo_pages',
+  ])
     result[m] = (await pool.query(`SELECT * FROM ${m} WHERE active=true ORDER BY id`)).rows
   result.reviews = (
     await pool.query(
