@@ -128,6 +128,8 @@ export default function App() {
         <Route path="/customised-gifts/:slug" element={<GiftDetail />} />
         <Route path="/product/:slug" element={<ProductDetail {...shared} />} />
         <Route path="/account" element={<Account />} />
+        <Route path="/orders" element={<Account />} />
+        <Route path="/orders/:orderNumber" element={<Account />} />
         <Route path="/login" element={<Account />} />
         <Route path="/wishlist" element={<Wishlist {...shared} />} />
         <Route

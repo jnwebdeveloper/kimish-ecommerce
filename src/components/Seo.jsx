@@ -69,6 +69,7 @@ export default function Seo() {
         seo?.noindex ||
         location.pathname.startsWith('/admin') ||
         location.pathname.startsWith('/checkout') ||
+        location.pathname.startsWith('/orders') ||
         location.pathname.startsWith('/account')
           ? 'noindex,nofollow'
           : 'index,follow',

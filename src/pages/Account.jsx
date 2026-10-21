@@ -1,3 +1,4 @@
+import Orders from './Orders'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Smartphone, ShieldCheck } from 'lucide-react'
@@ -67,11 +68,13 @@ export default function Account() {
       setBusy(false)
     }
   }
+  if (user && !loading)
+    return <Orders user={user} onSignOut={signOut} busy={busy} signOutError={error} />
   return (
     <main className="section page-top account-page">
       <div className="page-title">
-        <span className="eyebrow">YOUR KIMISH ACCOUNT</span>
-        <h1>{user ? 'Welcome to Kimish' : 'Good things start here.'}</h1>
+        <span className="eyebrow">MY ORDERS</span>
+        <h1>{user ? 'Welcome to Kimish' : 'Sign in to My Orders'}</h1>
         <p>
           {user
             ? 'You’re signed in with your verified mobile number.'
@@ -84,7 +87,7 @@ export default function Account() {
         </div>
         <h2 id="login-heading">
           {user
-            ? 'My account'
+            ? 'My Orders'
             : step === 'phone'
               ? 'Login with your phone'
               : 'Enter your verification code'}

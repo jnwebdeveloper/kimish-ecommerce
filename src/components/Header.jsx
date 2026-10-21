@@ -49,7 +49,7 @@ const menus = [
     ],
   },
 ]
-export default function Header({ cartCount = 0, wishlistCount = 0, user }) {
+export default function Header({ cartCount = 0, wishlistCount = 0 }) {
   const { products, categories, settings, navigation } = useStore()
   const [openMenu, setOpenMenu] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -278,9 +278,9 @@ export default function Header({ cartCount = 0, wishlistCount = 0, user }) {
           </Link>
         </nav>
         <nav className="boutique-actions" aria-label="Account actions">
-          <NavLink to="/account" aria-label={user ? 'My account' : 'Log in'}>
+          <NavLink to="/orders" aria-label="My Orders">
             <UserRound size={21} strokeWidth={1.5} />
-            <b>{user ? 'Account' : 'Log in'}</b>
+            <b>My Orders</b>
           </NavLink>
           <NavLink
             to="/wishlist"

@@ -37,7 +37,7 @@ export default function Footer() {
           <Link to="/track-order">Track Order</Link>
           <Link to="/policy">Shipping & No Returns</Link>
           <Link to="/wishlist">Wishlist</Link>
-          <Link to="/account">My account</Link>
+          <Link to="/orders">My Orders</Link>
           {navigation
             .filter((n) => n.location === 'footer')
             .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)

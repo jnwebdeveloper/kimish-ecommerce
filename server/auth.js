@@ -1,3 +1,4 @@
+import { customerOrders } from './services/customerOrders.js'
 import { randomBytes, createHash } from 'node:crypto'
 import { createLogger } from './lib/logger.js'
 
@@ -148,6 +149,21 @@ export function createAuthHandler({
     try {
       for (const [key, value] of sessions) if (value.expires <= now()) sessions.delete(key)
       const jar = cookies(request)
+      if (
+        request.method === 'GET' &&
+        (path === '/api/auth/orders' || path.startsWith('/api/auth/orders/'))
+      ) {
+        if (!jar.kimish_session)
+          return send(401, { message: 'Please sign in to view your orders.' })
+        if (!pool) return send(503, { message: 'Order history is temporarily unavailable.' })
+        const orderNumber =
+          path === '/api/auth/orders'
+            ? null
+            : decodeURIComponent(path.slice('/api/auth/orders/'.length))
+        if (orderNumber === '') return send(404, { message: 'Order not found.' })
+        const result = await customerOrders(pool, hash(jar.kimish_session), orderNumber)
+        return send(result.status, result.body)
+      }
       if (request.method === 'GET' && path === '/api/auth/session') {
         const session =
           pool && jar.kimish_session
