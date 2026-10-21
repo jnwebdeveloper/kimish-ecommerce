@@ -1,3 +1,4 @@
+import './ProductDetail.css'
 import StoreImage from '../components/StoreImage'
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -39,7 +40,7 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
     .filter(Boolean)
 
   return (
-    <main className="section page-top">
+    <main className="section page-top product-detail-page">
       <div className="product-detail">
         <div className="detail-gallery">
           <div className="thumbs thumbs-vertical">
@@ -118,52 +119,57 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
               <span>Secure checkout and payment integration ready</span>
             </div>
           </div>
-
-          <section className="product-facts" aria-label="Product information">
-            <div className="about-item-panel">
-              <span className="eyebrow">WHY YOU’LL LOVE IT</span>
-              <h2>About this item</h2>
-              <ul>
-                {aboutItems.map((item, i) => {
-                  const [lead, ...rest] = item.split(':')
-                  return (
-                    <li key={i}>
-                      <span>{String(i + 1).padStart(2, '0')}</span>
-                      <p>
-                        <strong>
-                          {lead}
-                          {rest.length ? ':' : ''}
-                        </strong>
-                        {rest.length ? ' ' + rest.join(':') : ''}
-                      </p>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-            <div className="product-care-grid">
-              <article>
-                <span>01</span>
-                <h4>Ingredients / Product Information</h4>
-                <p>{product.ingredients}</p>
-              </article>
-              <article>
-                <span>02</span>
-                <h4>Storage Instructions</h4>
-                <p>{product.storage}</p>
-              </article>
-              <article>
-                <span>03</span>
-                <h4>No Returns Policy</h4>
-                <p>
-                  Food products are non-returnable. Replacement or refund support is available for
-                  damaged or incorrect orders, subject to the final business policy.
-                </p>
-              </article>
-            </div>
-          </section>
         </div>
       </div>
+
+      <section
+        className={`product-facts product-information-section${aboutItems.length ? '' : ' without-about'}`}
+        aria-label="Product information"
+      >
+        {aboutItems.length > 0 && (
+          <div className="about-item-panel">
+            <span className="eyebrow">WHY YOU’LL LOVE IT</span>
+            <h2>About this item</h2>
+            <ul>
+              {aboutItems.map((item, i) => {
+                const [lead, ...rest] = item.split(':')
+                return (
+                  <li key={i}>
+                    <span>{String(i + 1).padStart(2, '0')}</span>
+                    <p>
+                      <strong>
+                        {lead}
+                        {rest.length ? ':' : ''}
+                      </strong>
+                      {rest.length ? ' ' + rest.join(':') : ''}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+        <div className="product-care-grid">
+          <article>
+            <span>01</span>
+            <h4>Ingredients / Product Information</h4>
+            <p>{product.ingredients}</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h4>Storage Instructions</h4>
+            <p>{product.storage}</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h4>No Returns Policy</h4>
+            <p>
+              Food products are non-returnable. Replacement or refund support is available for
+              damaged or incorrect orders, subject to the final business policy.
+            </p>
+          </article>
+        </div>
+      </section>
 
       <section className="section-inner">
         <h2>Customer Reviews</h2>
