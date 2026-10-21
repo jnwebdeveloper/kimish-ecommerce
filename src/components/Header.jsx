@@ -160,29 +160,6 @@ export default function Header({ cartCount = 0, wishlistCount = 0 }) {
                   id={`collection-panel-${index}`}
                   hidden={!expanded}
                 >
-                  <div className="mega-category-list">
-                    <span className="mega-kicker">EXPLORE {menu.name.toUpperCase()}</span>
-                    <Link
-                      className="mega-category-active"
-                      to={
-                        menu.name === 'Customised Gifts'
-                          ? '/customised-gifts'
-                          : `/shop?category=${encodeURIComponent(menu.name)}`
-                      }
-                      onClick={() => setOpenMenu(null)}
-                    >
-                      All {menu.name}
-                    </Link>
-                    {menu.categories.map((category) => (
-                      <Link
-                        key={category}
-                        to={`/shop?category=${encodeURIComponent(category)}`}
-                        onClick={() => setOpenMenu(null)}
-                      >
-                        {category}
-                      </Link>
-                    ))}
-                  </div>
                   <div className="mega-story">
                     <span className="mega-kicker">KIMISH {menu.name.toUpperCase()}</span>
                     <h2>
@@ -202,11 +179,6 @@ export default function Header({ cartCount = 0, wishlistCount = 0 }) {
                     >
                       EXPLORE {menu.name.toUpperCase()} <ArrowRight size={16} />
                     </Link>
-                    <div className="mega-trust">
-                      <span>Premium quality</span>
-                      <span>Hygienically packed</span>
-                      <span>Pan India delivery</span>
-                    </div>
                   </div>
                   <div className="mega-showcase">
                     <div className="mega-showcase-head">
