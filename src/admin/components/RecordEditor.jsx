@@ -1,3 +1,5 @@
+import RichTextEditor from './RichTextEditor'
+import { contentText } from '../../utils/richText'
 import { Fragment, useState } from 'react'
 import { apiRequest } from '../../data/StoreContext'
 import { acceptImages, isAllowedImage, uploadImage } from '../data/uploads'
@@ -42,7 +44,7 @@ export default function RecordEditor({
 
   const sections = Object.entries(
     moduleMeta.fields
-      .filter((f) => f.name !== 'slug' && !hiddenFields.includes(f.name))
+      .filter((f) => (f.name !== 'slug' || module === 'pages') && !hiddenFields.includes(f.name))
       .reduce((groups, f) => {
         ;(groups[sectionFor(f)] ||= []).push(f)
         return groups
@@ -51,7 +53,10 @@ export default function RecordEditor({
 
   async function save(e) {
     e.preventDefault()
-    const problem = validate?.(record)
+    const problem =
+      module === 'pages' && (!contentText(record.content).trim() || record.content.length > 20000)
+        ? 'Enter page content, up to 20,000 characters including formatting.'
+        : validate?.(record)
     if (problem) {
       setError(problem)
       return
@@ -92,6 +97,30 @@ export default function RecordEditor({
 
   const input = (f) => {
     const onChange = (e) => set(f.name, e.target.value)
+    if (module === 'pages' && f.name === 'slug')
+      return (
+        <>
+          <input
+            required
+            list="page-slug-options"
+            value={record.slug || ''}
+            onChange={onChange}
+            pattern="[a-z0-9]+(-[a-z0-9]+)*"
+            placeholder="terms-and-conditions"
+          />
+          <datalist id="page-slug-options">
+            {['terms-and-conditions', 'privacy-policy', 'about-us', 'contact-us', 'policy'].map(
+              (slug) => (
+                <option key={slug} value={slug} />
+              ),
+            )}
+          </datalist>
+          <small>
+            Use terms-and-conditions for the Terms page, or privacy-policy for Privacy. Other pages
+            use /pages/your-slug. Keep existing slugs to preserve links.
+          </small>
+        </>
+      )
     if (f.type === 'boolean')
       return (
         <input
@@ -144,7 +173,17 @@ export default function RecordEditor({
             <legend>{title}</legend>
             <div className="admin-form-grid">
               {fields.map((f) =>
-                fieldOverrides[f.name] ? (
+                module === 'pages' && f.name === 'content' ? (
+                  <div className="admin-field-wide" key={f.name}>
+                    <span>Page content *</span>
+                    <RichTextEditor
+                      value={record.content || ''}
+                      disabled={busy}
+                      onChange={(value) => set('content', value)}
+                    />
+                    <small>Enable Published and save to show this content on the website.</small>
+                  </div>
+                ) : fieldOverrides[f.name] ? (
                   <Fragment key={f.name}>{fieldOverrides[f.name](record, set)}</Fragment>
                 ) : (
                   <label

@@ -1,0 +1,70 @@
+.page-prose {
+  color: #625b50;
+  font-size: 15px;
+  line-height: 1.95;
+  overflow-wrap: anywhere;
+}
+.page-prose-plain {
+  white-space: pre-wrap;
+}
+.page-prose > :first-child {
+  margin-top: 0;
+}
+.page-prose > :last-child {
+  margin-bottom: 0;
+}
+.page-prose p,
+.page-prose ul,
+.page-prose ol {
+  margin: 0 0 20px;
+}
+.page-prose h2 {
+  font-family: var(--display, Georgia, serif);
+  font-size: 26px;
+  line-height: 1.4;
+  color: #353c2f;
+  margin: 36px 0 14px;
+  font-weight: 500;
+}
+.page-prose h3 {
+  font-size: 18px;
+  line-height: 1.5;
+  color: #353c2f;
+  margin: 28px 0 12px;
+}
+.page-prose ul,
+.page-prose ol {
+  padding-left: 24px;
+}
+.page-prose li {
+  margin-bottom: 8px;
+}
+.page-prose a {
+  color: #42643a;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.page-prose blockquote {
+  padding: 12px 20px;
+  margin: 24px 0;
+  border-left: 3px solid #93a583;
+  background: #f4f5ec;
+}
+.page-prose strong,
+.page-prose b {
+  font-weight: 700;
+  color: #403d34;
+}
+.app .page-prose h2 {
+  font-size: 26px;
+  line-height: 1.4;
+  margin: 36px 0 14px;
+}
+.app .page-prose h3 {
+  font-size: 18px;
+  line-height: 1.5;
+  margin: 28px 0 12px;
+}
+.app .page-prose > :first-child {
+  margin-top: 0;
+}

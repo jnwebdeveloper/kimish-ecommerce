@@ -1,3 +1,6 @@
+import { FileText, ArrowRight, ChevronRight, Mail } from 'lucide-react'
+import PageContent from '../components/PageContent'
+import './PolicyPage.css'
 import About from './About'
 import { useState } from 'react'
 import { useStore, apiRequest } from '../data/StoreContext'
@@ -94,43 +97,91 @@ export function TrackOrder() {
 export function Policy({ pageSlug }) {
   const { pages, settings } = useStore(),
     { slug } = useParams()
-  const page = pages.find((p) => p.slug === (pageSlug || slug || 'policy'))
+  const currentSlug = pageSlug || slug || 'policy'
+  const page = pages.find((p) => p.slug === currentSlug)
   if (page?.slug === 'about-us') return <About page={page} />
+  const links = [
+    ['terms-and-conditions', 'Terms & Conditions'],
+    ['privacy-policy', 'Privacy Policy'],
+    ['policy', 'Shipping policy'],
+    ['contact-us', 'Contact Us'],
+  ]
+  const title = page?.title || links.find(([key]) => key === currentSlug)?.[1] || 'Page not found'
   return (
-    <main className="section page-top policy-page">
-      <div className="page-title">
-        <span className="eyebrow">CUSTOMER CARE</span>
-        <h1>
-          {page?.title ||
-            { 'terms-and-conditions': 'Terms & Conditions', 'privacy-policy': 'Privacy Policy' }[
-              pageSlug
-            ] ||
-            'Page not found'}
-        </h1>
+    <main className="section page-top policy-document">
+      <nav className="policy-breadcrumb" aria-label="Breadcrumb">
+        <Link to="/">Home</Link>
+        <ChevronRight size={13} aria-hidden="true" />
+        <span aria-current="page">{title}</span>
+      </nav>
+      <header className="policy-document-heading">
+        <span className="policy-heading-icon" aria-hidden="true">
+          <FileText size={26} strokeWidth={1.4} />
+        </span>
+        <div>
+          <h1>{title}</h1>
+          <p>
+            {currentSlug === 'contact-us'
+              ? 'We’re here to help with your Kimish experience.'
+              : 'Helpful information for your Kimish experience.'}
+          </p>
+        </div>
+      </header>
+      <div className="policy-document-layout">
+        <aside className="policy-side">
+          <nav aria-label="Information pages">
+            <h2>Useful information</h2>
+            {links.map(([key, label]) => (
+              <Link
+                key={key}
+                to={key === 'policy' ? '/policy' : `/${key}`}
+                aria-current={currentSlug === key ? 'page' : undefined}
+              >
+                {label}
+                <ChevronRight size={14} aria-hidden="true" />
+              </Link>
+            ))}
+          </nav>
+          <div className="policy-help">
+            <Mail size={20} strokeWidth={1.5} />
+            <h3>A question in mind?</h3>
+            <p>Get in touch with our team. We’re happy to help.</p>
+            <Link to="/contact-us">
+              Contact us <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
+        </aside>
+        <article className="policy-document-content" aria-label={title}>
+          {!page && (
+            <div className="policy-unpublished">
+              <FileText size={36} strokeWidth={1.2} aria-hidden="true" />
+              <h2>Content coming soon</h2>
+              <p>
+                This page hasn’t been published yet. Please contact our team if you need assistance.
+              </p>
+              <Link to="/contact-us">
+                Get in touch <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
+          )}
+          {page?.slug === 'contact-us' && (
+            <div className="policy-contact-details">
+              {settings.support_email && (
+                <p>
+                  Email: <a href={`mailto:${settings.support_email}`}>{settings.support_email}</a>
+                </p>
+              )}
+              {settings.support_phone && (
+                <p>
+                  Phone: <a href={`tel:${settings.support_phone}`}>{settings.support_phone}</a>
+                </p>
+              )}
+              {settings.support_hours && <p>{settings.support_hours}</p>}
+            </div>
+          )}
+          {page && <PageContent value={page.content} />}
+        </article>
       </div>
-      {!page && (
-        <p>This page is not currently published. Please contact our support team for assistance.</p>
-      )}
-      {page?.slug === 'contact-us' && (
-        <div className="policy-content">
-          {settings.support_email && (
-            <p>
-              Email: <a href={`mailto:${settings.support_email}`}>{settings.support_email}</a>
-            </p>
-          )}
-          {settings.support_phone && (
-            <p>
-              Phone: <a href={`tel:${settings.support_phone}`}>{settings.support_phone}</a>
-            </p>
-          )}
-          {settings.support_hours && <p>{settings.support_hours}</p>}
-        </div>
-      )}
-      {page && (
-        <div className="policy-content" style={{ whiteSpace: 'pre-wrap' }}>
-          {page.content}
-        </div>
-      )}
     </main>
   )
 }

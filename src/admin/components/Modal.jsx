@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 const focusableSelector =
-  'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]'
+  'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [contenteditable="true"]'
 
 // Dialog shell: locks page scroll, moves focus inside, keeps Tab within the dialog, closes on Escape
 // (unless busy) and returns focus to where it was when closed.

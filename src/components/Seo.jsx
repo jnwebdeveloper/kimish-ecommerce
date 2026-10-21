@@ -1,3 +1,4 @@
+import { contentText } from '../utils/richText'
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useStore } from '../data/StoreContext'
@@ -43,7 +44,7 @@ export default function Seo() {
         : gift
           ? gift.seo_description || gift.description
           : page
-            ? page.content.slice(0, 160)
+            ? contentText(page.content).slice(0, 160)
             : settings.seo_description ||
               'Discover premium nuts, seeds, dry fruits, roasted favourites and customised gift boxes from Kimish.')
     document.title = title

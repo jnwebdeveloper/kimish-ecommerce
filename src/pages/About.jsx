@@ -1,3 +1,4 @@
+import PageContent from '../components/PageContent'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Leaf, Gift, Coffee, MoveUpRight } from 'lucide-react'
 import StoreImage from '../components/StoreImage'
@@ -87,7 +88,7 @@ export default function About({ page }) {
         </div>
         <div className="about-story-copy">
           <p className="about-story-lead">Simple pleasures deserve a place in every day.</p>
-          <div className="about-published-story">{page.content}</div>
+          <PageContent className="about-published-story" value={page.content} />
           <Link className="about-text-link" to="/shop">
             Find your next favourite <MoveUpRight size={17} />
           </Link>

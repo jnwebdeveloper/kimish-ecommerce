@@ -1,3 +1,4 @@
+import PageContent from '../../components/PageContent'
 export const singular = {
   seo_pages: 'SEO page',
   products: 'product',
@@ -182,7 +183,9 @@ export function AdminDetails({ row, module, meta, references, valueFor }) {
               >
                 <dt>{labelFor(key, meta)}</dt>
                 <dd>
-                  {typeof row[key] === 'object' ? (
+                  {module === 'pages' && key === 'content' ? (
+                    <PageContent value={row[key]} />
+                  ) : typeof row[key] === 'object' ? (
                     <NestedValue value={row[key]} />
                   ) : (
                     valueFor(row, key)
