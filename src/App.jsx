@@ -1,3 +1,4 @@
+import './catalog-loading.css'
 import { useEffect, useMemo, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Account from './pages/Account'
@@ -19,7 +20,7 @@ import { Offers, Policy, TrackOrder } from './pages/StaticPages'
 
 export default function App() {
   const { user } = useAuth()
-  const { products } = useStore()
+  const { products, catalogReady, catalogPending, catalogError, refresh } = useStore()
   const safeRead = (key) => {
     try {
       const value = localStorage.getItem(key)
@@ -36,6 +37,7 @@ export default function App() {
   const location = useLocation()
 
   useEffect(() => {
+    if (!catalogReady) return
     setCart((previous) =>
       previous.flatMap((item) => {
         const product = products.find(
@@ -45,7 +47,7 @@ export default function App() {
         return variant ? [{ ...item, product, variant }] : []
       }),
     )
-  }, [products])
+  }, [products, catalogReady])
 
   useEffect(() => {
     try {
@@ -121,33 +123,63 @@ export default function App() {
         query={query}
         setQuery={setQuery}
       />
-      <Routes>
-        <Route path="/" element={<Home {...shared} />} />
-        <Route path="/shop" element={<Shop query={query} {...shared} />} />
-        <Route path="/customised-gifts" element={<CustomisedGifts />} />
-        <Route path="/customised-gifts/:slug" element={<GiftDetail />} />
-        <Route path="/product/:slug" element={<ProductDetail {...shared} />} />
-        <Route path="/account" element={<Account />} />
-        <Route path="/orders" element={<Account />} />
-        <Route path="/orders/:orderNumber" element={<Account />} />
-        <Route path="/login" element={<Account />} />
-        <Route path="/wishlist" element={<Wishlist {...shared} />} />
-        <Route
-          path="/cart"
-          element={<Cart cart={cart} updateQty={updateQty} removeFromCart={removeFromCart} />}
-        />
-        <Route path="/checkout" element={<Checkout cart={cart} clearCart={() => setCart([])} />} />
-        <Route path="/order-confirmation" element={<OrderConfirmation />} />
-        <Route path="/offers" element={<Offers />} />
-        <Route path="/track-order" element={<TrackOrder />} />
-        <Route path="/about-us" element={<Policy pageSlug="about-us" />} />
-        <Route path="/contact-us" element={<Policy pageSlug="contact-us" />} />
-        <Route path="/terms-and-conditions" element={<Policy pageSlug="terms-and-conditions" />} />
-        <Route path="/privacy-policy" element={<Policy pageSlug="privacy-policy" />} />
-        <Route path="/pages/contact" element={<Policy pageSlug="contact-us" />} />
-        <Route path="/pages/:slug" element={<Policy />} />
-        <Route path="/policy" element={<Policy />} />
-      </Routes>
+      {catalogError && (
+        <div className="catalog-notice" role="status">
+          We couldn’t update the collection. <button onClick={refresh}>Try again</button>
+        </div>
+      )}
+      {catalogPending &&
+      !['/', '/account', '/login', '/orders', '/track-order', '/order-confirmation'].includes(
+        location.pathname,
+      ) &&
+      !location.pathname.startsWith('/orders/') ? (
+        <main
+          className="section catalog-placeholder"
+          aria-label="Loading page content"
+          aria-busy="true"
+        >
+          <div className="catalog-placeholder-title" />
+          <div className="catalog-placeholder-grid">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} />
+            ))}
+          </div>
+        </main>
+      ) : (
+        <Routes>
+          <Route path="/" element={<Home {...shared} />} />
+          <Route path="/shop" element={<Shop query={query} {...shared} />} />
+          <Route path="/customised-gifts" element={<CustomisedGifts />} />
+          <Route path="/customised-gifts/:slug" element={<GiftDetail />} />
+          <Route path="/product/:slug" element={<ProductDetail {...shared} />} />
+          <Route path="/account" element={<Account />} />
+          <Route path="/orders" element={<Account />} />
+          <Route path="/orders/:orderNumber" element={<Account />} />
+          <Route path="/login" element={<Account />} />
+          <Route path="/wishlist" element={<Wishlist {...shared} />} />
+          <Route
+            path="/cart"
+            element={<Cart cart={cart} updateQty={updateQty} removeFromCart={removeFromCart} />}
+          />
+          <Route
+            path="/checkout"
+            element={<Checkout cart={cart} clearCart={() => setCart([])} />}
+          />
+          <Route path="/order-confirmation" element={<OrderConfirmation />} />
+          <Route path="/offers" element={<Offers />} />
+          <Route path="/track-order" element={<TrackOrder />} />
+          <Route path="/about-us" element={<Policy pageSlug="about-us" />} />
+          <Route path="/contact-us" element={<Policy pageSlug="contact-us" />} />
+          <Route
+            path="/terms-and-conditions"
+            element={<Policy pageSlug="terms-and-conditions" />}
+          />
+          <Route path="/privacy-policy" element={<Policy pageSlug="privacy-policy" />} />
+          <Route path="/pages/contact" element={<Policy pageSlug="contact-us" />} />
+          <Route path="/pages/:slug" element={<Policy />} />
+          <Route path="/policy" element={<Policy />} />
+        </Routes>
+      )}
       <Footer />
     </div>
   )

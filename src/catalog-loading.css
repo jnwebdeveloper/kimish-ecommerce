@@ -1,0 +1,42 @@
+.catalog-notice {
+  padding: 12px 5%;
+  background: #f3eee3;
+  color: #514531;
+  font-size: 14px;
+}
+.catalog-notice button {
+  margin-left: 12px;
+  text-decoration: underline;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.catalog-placeholder {
+  min-height: 60vh;
+}
+.catalog-placeholder-title {
+  width: 35%;
+  height: 38px;
+  margin: 30px 0;
+  border-radius: 8px;
+  background: #eee9df;
+}
+.catalog-placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+.catalog-placeholder-grid > div {
+  aspect-ratio: 3/4;
+  border-radius: 16px;
+  background: #f0ece3;
+}
+@media (max-width: 700px) {
+  .catalog-placeholder-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .catalog-placeholder-title {
+    width: 65%;
+  }
+}

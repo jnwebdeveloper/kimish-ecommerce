@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { emptyCatalog, readCatalog, saveCatalog, validCatalog } from './storeCache'
+import { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo } from 'react'
 const StoreContext = createContext(null)
 export async function apiRequest(path, body, method) {
   const response = await fetch(path, {
@@ -21,39 +22,61 @@ export async function apiRequest(path, body, method) {
   return data
 }
 export function StoreProvider({ children }) {
-  const [data, setData] = useState(null),
-    [error, setError] = useState('')
-  async function refresh() {
+  const [data, setData] = useState(() => {
     try {
-      const d = await apiRequest('/api/store')
-      setData({
-        ...d,
-        coupons: Object.fromEntries(
-          d.coupons.map((c) => [
-            c.code,
-            { ...c, value: Number(c.value), minCart: Number(c.min_cart) },
-          ]),
-        ),
-      })
-      setError('')
-    } catch (e) {
-      setError(e.message)
+      return readCatalog(window.sessionStorage)
+    } catch {
+      return null
     }
-  }
+  })
+  const [error, setError] = useState('')
+  const [catalogReady, setCatalogReady] = useState(false)
+  const pending = useRef(null)
+  const refresh = useCallback(() => {
+    if (pending.current) return pending.current
+    pending.current = (async () => {
+      try {
+        const d = await apiRequest('/api/store')
+        if (!validCatalog(d))
+          throw new Error('The collection could not be updated. Please try again.')
+        setData(d)
+        setCatalogReady(true)
+        try {
+          saveCatalog(window.sessionStorage, d)
+        } catch {
+          /* Browser storage is optional. */
+        }
+        setError('')
+      } catch (e) {
+        setError(e.message)
+      } finally {
+        pending.current = null
+      }
+    })()
+    return pending.current
+  }, [])
   useEffect(() => {
     refresh()
-    const onFocus = () => refresh()
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [])
-  if (!data)
-    return (
-      <main className="section">
-        <h1>Kimish</h1>
-        <p role="status">{error || 'Loading the collection…'}</p>
-        {error && <button onClick={refresh}>Try again</button>}
-      </main>
-    )
-  return <StoreContext.Provider value={{ ...data, refresh }}>{children}</StoreContext.Provider>
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [refresh])
+  const catalog = data || emptyCatalog
+  const value = useMemo(
+    () => ({
+      ...catalog,
+      coupons: Object.fromEntries(
+        catalog.coupons.map((c) => [
+          c.code,
+          { ...c, value: Number(c.value), minCart: Number(c.min_cart) },
+        ]),
+      ),
+      refresh,
+      catalogReady,
+      catalogPending: !data,
+      catalogError: error,
+    }),
+    [catalog, data, refresh, catalogReady, error],
+  )
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }
 export const useStore = () => useContext(StoreContext)
