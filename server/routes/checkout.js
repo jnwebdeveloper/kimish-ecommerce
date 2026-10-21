@@ -1,3 +1,4 @@
+import { checkoutCustomer } from '../services/checkoutCustomer.js'
 import express from 'express'
 import { httpError } from '../lib/http.js'
 import { cartWeight, placeOrder } from '../services/orders.js'
@@ -9,7 +10,7 @@ export function checkoutRoutes(ctx) {
   const router = express.Router()
 
   // 20 requests per IP per minute across these public endpoints (counted per server instance)
-  router.use(['/orders', '/track', '/shipping'], (req, res, next) => {
+  router.use(['/orders', '/auth/checkout', '/track', '/shipping'], (req, res, next) => {
     const key = 'public:' + req.socket.remoteAddress
     const old = attempts.get(key)
     const value = old && old.until > Date.now() ? old : { count: 0, until: Date.now() + 60000 }
@@ -22,12 +23,13 @@ export function checkoutRoutes(ctx) {
 
   // The storefront sells only with online payment and Shiprocket delivery; Cash on Delivery and
   // other shipping methods remain available to manual orders created in the admin panel
-  router.post('/orders', async (req, res) => {
+  router.post(['/orders', '/auth/checkout'], async (req, res) => {
+    const owner = req.path === '/auth/checkout' ? await checkoutCustomer(pool, req) : null
     const body = req.body || {}
     if (body.payment !== 'razorpay') throw httpError(400, 'Only online payment is available.')
     if (body.shippingMethod !== 'shiprocket')
       throw httpError(400, 'Check shipping rates and choose a courier.')
-    res.status(201).json(await placeOrder(ctx, body))
+    res.status(201).json(await placeOrder(ctx, body, null, owner))
   })
 
   router.post('/shipping/rates', async (req, res) => {

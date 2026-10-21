@@ -1,3 +1,4 @@
+import { useAuth } from '../auth/AuthContext'
 import { trackCommerce } from '../data/pixel.js'
 import { useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -10,6 +11,7 @@ const payment = 'razorpay'
 const shippingMethod = 'shiprocket'
 
 export default function Checkout({ cart, clearCart }) {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const { coupons, refresh } = useStore()
   const location = useLocation()
@@ -110,7 +112,7 @@ export default function Checkout({ cart, clearCart }) {
     try {
       if (!window.Razorpay)
         throw new Error('Razorpay checkout could not be loaded. Please refresh and try again.')
-      const order = await apiRequest('/api/orders', {
+      const order = await apiRequest(user ? '/api/auth/checkout' : '/api/orders', {
         customer: form,
         payment,
         shippingMethod,

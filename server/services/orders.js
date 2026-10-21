@@ -96,7 +96,7 @@ async function confirmShippingQuote({ pool, shiprocket }, body) {
 // Places a storefront or manual (admin) order in one transaction: locks and decrements stock,
 // applies the coupon, prices shipping, saves customer/address/order/items, and starts the
 // Razorpay payment when paying online. Prices and totals always come from the database.
-export async function placeOrder(ctx, body, admin = null) {
+export async function placeOrder(ctx, body, admin = null, accountCustomer = null) {
   const { pool, razorpay } = ctx
   checkOrderRequest(body, razorpay)
   const cust = body.customer,
@@ -144,12 +144,15 @@ export async function placeOrder(ctx, body, admin = null) {
             ? 0
             : Number(settings.shipping_fee || 79)
     const total = Math.max(0, subtotal - discount + shipping)
-    const customer = (
-      await c.query(
-        'INSERT INTO customers(name,phone,email) VALUES($1,$2,$3) ON CONFLICT(phone) DO UPDATE SET name=EXCLUDED.name,email=EXCLUDED.email RETURNING id',
-        [cust.name, '+91' + cust.mobile, cust.email || ''],
-      )
-    ).rows[0]
+    // A signed-in buyer owns the order even when shipping to a different recipient.
+    const customer =
+      accountCustomer ||
+      (
+        await c.query(
+          'INSERT INTO customers(name,phone,email) VALUES($1,$2,$3) ON CONFLICT(phone) DO UPDATE SET name=EXCLUDED.name,email=EXCLUDED.email RETURNING id',
+          [cust.name, '+91' + cust.mobile, cust.email || ''],
+        )
+      ).rows[0]
     await c.query(
       'INSERT INTO addresses(customer_id,address,landmark,city,state,pincode) VALUES($1,$2,$3,$4,$5,$6)',
       [customer.id, cust.address, cust.landmark || '', cust.city, cust.state, cust.pincode],
