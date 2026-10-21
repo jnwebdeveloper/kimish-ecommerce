@@ -252,19 +252,16 @@ export default function Header({ cartCount = 0, wishlistCount = 0 }) {
         <nav className="boutique-actions" aria-label="Account actions">
           <NavLink to="/orders" aria-label="My Orders">
             <UserRound size={21} strokeWidth={1.5} />
-            <b>My Orders</b>
           </NavLink>
           <NavLink
             to="/wishlist"
             aria-label={`Wishlist${wishlistCount ? `, ${wishlistCount} items` : ''}`}
           >
             <Heart size={21} strokeWidth={1.5} />
-            <b>Wishlist</b>
             {wishlistCount > 0 && <span>{wishlistCount}</span>}
           </NavLink>
           <NavLink to="/cart" aria-label={`Cart${cartCount ? `, ${cartCount} items` : ''}`}>
             <ShoppingBag size={21} strokeWidth={1.5} />
-            <b>Cart</b>
             {cartCount > 0 && <span>{cartCount}</span>}
           </NavLink>
         </nav>
