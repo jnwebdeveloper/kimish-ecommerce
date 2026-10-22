@@ -87,3 +87,17 @@
     left: 18px;
   }
 }
+
+.app .product-detail-page .pairing-rail {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1000px) {
+  .app .product-detail-page .pairing-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .app .product-detail-page .pairing-rail {
+    grid-template-columns: 1fr;
+  }
+}

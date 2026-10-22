@@ -7,7 +7,7 @@ import ProductCard from '../components/ProductCard'
 import { Heart, ShieldCheck, Star, Truck } from 'lucide-react'
 
 export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
-  const { products, reviews } = useStore()
+  const { products } = useStore()
   const { slug } = useParams()
   const navigate = useNavigate()
   const product = products.find((p) => p.slug === slug)
@@ -22,7 +22,7 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
     const complementary = products.filter(
       (p) => p.category !== product.category && p.id !== product.id,
     )
-    return [...sameCategory, ...complementary].slice(0, 3)
+    return [...sameCategory, ...complementary].slice(0, 4)
   }, [product, products])
 
   if (!product)
@@ -168,22 +168,6 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
               damaged or incorrect orders, subject to the final business policy.
             </p>
           </article>
-        </div>
-      </section>
-
-      <section className="section-inner">
-        <h2>Customer Reviews</h2>
-        <div className="review-grid">
-          {reviews
-            .filter((r) => r.product_id === product.id)
-            .map((r) => (
-              <div className="review-card" key={r.id}>
-                <strong>{'★'.repeat(r.rating)}</strong>
-                <p>{r.content}</p>
-                <span>{r.customer_name}</span>
-              </div>
-            ))}
-          {!reviews.some((r) => r.product_id === product.id) && <p>No reviews yet.</p>}
         </div>
       </section>
 

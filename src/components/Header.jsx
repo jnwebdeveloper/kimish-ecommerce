@@ -1,3 +1,4 @@
+import './MegaMenu.css'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import {
@@ -139,6 +140,9 @@ export default function Header({ cartCount = 0, wishlistCount = 0 }) {
               ...baseMenu,
               categories: dbCategories.length ? dbCategories : baseMenu.categories,
             }
+            const picks = (
+              menu.gifts || products.filter((product) => menu.categories.includes(product.category))
+            ).slice(0, 3)
             const expanded = openMenu === menu.name
             const active = selected === menu.name || menu.categories.includes(selected)
             return (
@@ -156,7 +160,11 @@ export default function Header({ cartCount = 0, wishlistCount = 0 }) {
                   <ChevronDown size={14} />
                 </button>
                 <div
-                  className="collection-panel luxury-mega"
+                  className="collection-panel luxury-mega compact-collection-menu"
+                  style={{
+                    '--menu-count': Math.max(1, picks.length),
+                    '--menu-width': `${340 + Math.max(1, picks.length) * 190}px`,
+                  }}
                   id={`collection-panel-${index}`}
                   hidden={!expanded}
                 >
@@ -199,32 +207,27 @@ export default function Header({ cartCount = 0, wishlistCount = 0 }) {
                       </Link>
                     </div>
                     <div className="mega-showcase-grid">
-                      {(
-                        menu.gifts ||
-                        products.filter((product) => menu.categories.includes(product.category))
-                      )
-                        .slice(0, 3)
-                        .map((item) => {
-                          const isGift = Boolean(menu.gifts)
-                          const href = isGift ? '/customised-gifts' : `/product/${item.slug}`
-                          const image = isGift ? item.image : item.images?.[0]
-                          return (
-                            <Link
-                              className="mega-showcase-card"
-                              key={item.id || item.name}
-                              to={href}
-                              onClick={() => {
-                                setOpenMenu(null)
-                                setMobileOpen(false)
-                              }}
-                            >
-                              <span>
-                                <img src={image} alt={item.name} />
-                              </span>
-                              <strong>{item.name}</strong>
-                            </Link>
-                          )
-                        })}
+                      {picks.map((item) => {
+                        const isGift = Boolean(menu.gifts)
+                        const href = isGift ? '/customised-gifts' : `/product/${item.slug}`
+                        const image = isGift ? item.image : item.images?.[0]
+                        return (
+                          <Link
+                            className="mega-showcase-card"
+                            key={item.id || item.name}
+                            to={href}
+                            onClick={() => {
+                              setOpenMenu(null)
+                              setMobileOpen(false)
+                            }}
+                          >
+                            <span>
+                              <img src={image} alt={item.name} />
+                            </span>
+                            <strong>{item.name}</strong>
+                          </Link>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>

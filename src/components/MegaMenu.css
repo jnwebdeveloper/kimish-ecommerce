@@ -1,0 +1,74 @@
+.app .luxury-mega.compact-collection-menu {
+  width: min(var(--menu-width), calc(100vw - 48px));
+  max-width: 940px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 22px;
+  padding: 22px;
+  max-height: calc(100dvh - 150px);
+  overflow-y: auto;
+}
+.app .compact-collection-menu .mega-story h2 {
+  font-size: 26px;
+  line-height: 1.15;
+  margin: 12px 0;
+}
+.app .compact-collection-menu .mega-story p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+.app .compact-collection-menu .mega-kicker {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+.app .compact-collection-menu .mega-cta {
+  font-size: 10px;
+  padding: 10px 12px;
+  gap: 8px;
+}
+.app .compact-collection-menu .mega-showcase {
+  padding-left: 20px;
+  min-width: 0;
+}
+.app .compact-collection-menu .mega-showcase-head {
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.app .compact-collection-menu .mega-showcase-grid {
+  grid-template-columns: repeat(var(--menu-count), minmax(0, 1fr));
+  gap: 12px;
+}
+.app .compact-collection-menu .mega-showcase-card > span {
+  max-height: 180px;
+  background: #fff;
+}
+.app .compact-collection-menu .mega-showcase-card strong {
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 0 0;
+}
+@media (max-width: 760px) {
+  .app .luxury-mega.compact-collection-menu {
+    width: 100%;
+    max-width: none;
+    left: auto;
+    right: auto;
+    transform: none;
+    grid-template-columns: 1fr;
+    padding: 14px 12px;
+    max-height: 60dvh;
+  }
+  .app .compact-collection-menu .mega-showcase {
+    padding-left: 0;
+  }
+  .app .compact-collection-menu .mega-showcase-grid {
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  }
+  .app .compact-collection-menu .mega-showcase-card {
+    max-width: 180px;
+  }
+}
