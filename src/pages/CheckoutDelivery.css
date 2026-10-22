@@ -1,0 +1,117 @@
+.app .guest-checkout .delivery-details-card {
+  padding: 26px;
+  border-radius: 16px;
+  background: #fffdf9;
+  border: 1px solid #e5ddcf;
+}
+.app .delivery-details-card .checkout-heading {
+  gap: 14px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.app .delivery-details-card .checkout-heading > svg {
+  width: 42px;
+  height: 42px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #eef1e6;
+  color: #61764f;
+  flex-shrink: 0;
+}
+.app .delivery-details-card .checkout-heading .eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+.app .delivery-details-card .checkout-heading h3 {
+  font-size: 26px;
+  line-height: 1.2;
+  margin: 4px 0 0;
+}
+.app .delivery-details-card .delivery-intro {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #827565;
+  margin: 10px 0 24px;
+}
+.app .delivery-details-card .guest-form {
+  gap: 16px 20px;
+}
+.app .delivery-details-card .delivery-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #6b795a;
+  margin: 0 0 2px;
+}
+.app .delivery-details-card .delivery-address-label {
+  padding-top: 20px;
+  margin-top: 4px;
+  border-top: 1px solid #eae3d7;
+}
+.app .delivery-details-card .guest-form label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #473b2c;
+  line-height: 1.5;
+}
+.app .delivery-details-card .guest-form label small {
+  font-size: 11px;
+  font-weight: 400;
+  color: #938777;
+}
+.app .delivery-details-card .guest-form input {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  padding: 11px 13px;
+  margin-top: 7px;
+  border: 1px solid #ded7ca;
+  border-radius: 8px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #392e23;
+  box-shadow: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.app .delivery-details-card .guest-form input::placeholder {
+  color: #a0998d;
+  font-size: 13px;
+}
+.app .delivery-details-card .guest-form input:focus {
+  outline: none;
+  border-color: #718462;
+  box-shadow: 0 0 0 3px #71846217;
+}
+.app .delivery-details-card .guest-form input[aria-invalid='true'] {
+  border-color: #b96850;
+}
+.app .delivery-details-card .guest-form .field-error {
+  display: block;
+  color: #a34e38;
+  margin-top: 5px;
+  font-size: 11px;
+}
+@media (max-width: 600px) {
+  .app .guest-checkout .delivery-details-card {
+    padding: 20px 16px;
+  }
+  .app .delivery-details-card .guest-form {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .app .delivery-details-card .guest-form .span-2 {
+    grid-column: 1/-1;
+  }
+  .app .delivery-details-card .guest-form input {
+    font-size: 16px;
+  }
+  .app .delivery-details-card .checkout-heading h3 {
+    font-size: 23px;
+  }
+}

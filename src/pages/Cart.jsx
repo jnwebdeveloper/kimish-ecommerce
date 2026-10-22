@@ -1,3 +1,6 @@
+import './Cart.css'
+import { Trash2, Minus, Plus, ArrowLeft } from 'lucide-react'
+import StoreImage from '../components/StoreImage'
 import { Link } from 'react-router-dom'
 import { useStore } from '../data/StoreContext'
 import { useState } from 'react'
@@ -25,7 +28,7 @@ export default function Cart({ cart, updateQty, removeFromCart }) {
   }
 
   return (
-    <main className="section page-top">
+    <main className="section page-top refined-cart-page">
       <div className="page-title">
         <span className="eyebrow">YOUR BAG</span>
         <h1>Shopping Cart</h1>
@@ -40,33 +43,52 @@ export default function Cart({ cart, updateQty, removeFromCart }) {
         </div>
       ) : (
         <div className="cart-layout">
-          <section className="cart-list">
+          <section className="cart-list" aria-label="Items in your cart">
+            <div className="cart-list-heading">
+              <h2>
+                Your items <span>{cart.reduce((sum, item) => sum + item.qty, 0)}</span>
+              </h2>
+              <Link to="/shop">
+                <ArrowLeft size={14} /> Continue shopping
+              </Link>
+            </div>
             {cart.map((item) => (
               <div className="cart-item" key={`${item.product.id}-${item.variant.weight}`}>
-                <img src={item.product.images[0]} alt={item.product.name} />
+                <Link className="cart-product-photo" to={`/product/${item.product.slug}`}>
+                  <StoreImage src={item.product.images[0]} alt={item.product.name} />
+                </Link>
                 <div className="grow">
-                  <strong>{item.product.name}</strong>
-                  <span>{item.variant.weight}</span>
+                  <Link className="cart-product-title" to={`/product/${item.product.slug}`}>
+                    {item.product.name}
+                  </Link>
+                  <span className="cart-pack-label">
+                    {item.variant.weight} pack <span>· ₹{item.variant.price} each</span>
+                  </span>
                   <div className="qty">
                     <button
+                      disabled={item.qty <= 1}
                       aria-label={`Decrease quantity of ${item.product.name}`}
                       onClick={() => updateQty(item, Math.max(1, item.qty - 1))}
                     >
-                      −
+                      <Minus size={14} />
                     </button>
                     <span>{item.qty}</span>
                     <button
                       aria-label={`Increase quantity of ${item.product.name}`}
                       onClick={() => updateQty(item, item.qty + 1)}
                     >
-                      +
+                      <Plus size={14} />
                     </button>
                   </div>
                 </div>
                 <div className="cart-price">
                   <strong>₹{item.variant.price * item.qty}</strong>
-                  <button className="link-btn" onClick={() => removeFromCart(item)}>
-                    Remove
+                  <button
+                    className="link-btn cart-remove"
+                    aria-label={`Remove ${item.product.name} from cart`}
+                    onClick={() => removeFromCart(item)}
+                  >
+                    <Trash2 size={14} /> Remove
                   </button>
                 </div>
               </div>

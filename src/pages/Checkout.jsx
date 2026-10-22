@@ -1,3 +1,4 @@
+import './CheckoutDelivery.css'
 import { useAuth } from '../auth/AuthContext'
 import { trackCommerce } from '../data/pixel.js'
 import { useMemo, useState } from 'react'
@@ -224,7 +225,7 @@ export default function Checkout({ cart, clearCart }) {
       </div>
       <form className="checkout-grid" onSubmit={submit} noValidate>
         <div className="checkout-stack">
-          <section className="checkout-card">
+          <section className="checkout-card delivery-details-card">
             <div className="checkout-heading">
               <MapPin />
               <div>
@@ -232,11 +233,16 @@ export default function Checkout({ cart, clearCart }) {
                 <h3>Delivery details</h3>
               </div>
             </div>
+            <p className="delivery-intro">Tell us where to send your Kimish favourites.</p>
             <div className="form-grid guest-form">
+              <div className="delivery-group-label span-2">Contact information</div>
               <label>
                 Full name
                 <input
                   name="name"
+                  autoComplete="name"
+                  aria-invalid={Boolean(fieldErrors.name)}
+                  aria-describedby={fieldErrors.name ? 'name-error' : undefined}
                   value={form.name}
                   onChange={setField}
                   required
@@ -248,6 +254,11 @@ export default function Checkout({ cart, clearCart }) {
                 Mobile number
                 <input
                   name="mobile"
+                  type="tel"
+                  maxLength={10}
+                  autoComplete="tel-national"
+                  aria-invalid={Boolean(fieldErrors.mobile)}
+                  aria-describedby={fieldErrors.mobile ? 'mobile-error' : undefined}
                   value={form.mobile}
                   onChange={setField}
                   required
@@ -261,6 +272,9 @@ export default function Checkout({ cart, clearCart }) {
                 Email <small>(for order updates)</small>
                 <input
                   name="email"
+                  autoComplete="email"
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  aria-describedby={fieldErrors.email ? 'email-error' : undefined}
                   value={form.email}
                   onChange={setField}
                   type="email"
@@ -268,10 +282,17 @@ export default function Checkout({ cart, clearCart }) {
                 />
                 {message('email')}
               </label>
+              <div className="delivery-group-label delivery-address-label span-2">
+                Delivery address
+              </div>
               <label>
                 PIN code
                 <input
                   name="pincode"
+                  maxLength={6}
+                  autoComplete="postal-code"
+                  aria-invalid={Boolean(fieldErrors.pincode)}
+                  aria-describedby={fieldErrors.pincode ? 'pincode-error' : undefined}
                   value={form.pincode}
                   onChange={setField}
                   required
@@ -285,6 +306,9 @@ export default function Checkout({ cart, clearCart }) {
                 City
                 <input
                   name="city"
+                  autoComplete="address-level2"
+                  aria-invalid={Boolean(fieldErrors.city)}
+                  aria-describedby={fieldErrors.city ? 'city-error' : undefined}
                   value={form.city}
                   onChange={setField}
                   required
@@ -296,6 +320,9 @@ export default function Checkout({ cart, clearCart }) {
                 House / Flat / Street
                 <input
                   name="address"
+                  autoComplete="street-address"
+                  aria-invalid={Boolean(fieldErrors.address)}
+                  aria-describedby={fieldErrors.address ? 'address-error' : undefined}
                   value={form.address}
                   onChange={setField}
                   required
@@ -317,6 +344,9 @@ export default function Checkout({ cart, clearCart }) {
                 State
                 <input
                   name="state"
+                  autoComplete="address-level1"
+                  aria-invalid={Boolean(fieldErrors.state)}
+                  aria-describedby={fieldErrors.state ? 'state-error' : undefined}
                   value={form.state}
                   onChange={setField}
                   required
