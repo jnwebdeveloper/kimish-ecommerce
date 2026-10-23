@@ -1,4 +1,5 @@
-import { FileText, ArrowRight, ChevronRight, Mail } from 'lucide-react'
+import './ContactDetails.css'
+import { FileText, ArrowRight, ChevronRight, Mail, MapPin, Phone, Clock } from 'lucide-react'
 import PageContent from '../components/PageContent'
 import './PolicyPage.css'
 import About from './About'
@@ -164,20 +165,68 @@ export function Policy({ pageSlug }) {
               </Link>
             </div>
           )}
-          {page?.slug === 'contact-us' && (
-            <div className="policy-contact-details">
-              {settings.support_email && (
+          {currentSlug === 'contact-us' && (
+            <section className="contact-details-panel" aria-label="Contact details">
+              <div className="contact-intro">
+                <span className="eyebrow">LET’S CONNECT</span>
+                <h2>We’d love to hear from you.</h2>
                 <p>
-                  Email: <a href={`mailto:${settings.support_email}`}>{settings.support_email}</a>
+                  For product questions, order enquiries or thoughtful gifting, get in touch with
+                  the Kimish team.
                 </p>
+              </div>
+              <div className="contact-methods">
+                <div className="contact-method">
+                  <span className="contact-method-icon">
+                    <MapPin size={21} />
+                  </span>
+                  <div>
+                    <h3>Our address</h3>
+                    {settings.support_address ? (
+                      <address>{settings.support_address}</address>
+                    ) : (
+                      <p>Contact our team for address details.</p>
+                    )}
+                  </div>
+                </div>
+                <div className="contact-method">
+                  <span className="contact-method-icon">
+                    <Mail size={21} />
+                  </span>
+                  <div>
+                    <h3>Email us</h3>
+                    {settings.support_email ? (
+                      <a href={`mailto:${settings.support_email}`}>{settings.support_email}</a>
+                    ) : (
+                      <p>Email details will be available soon.</p>
+                    )}
+                  </div>
+                </div>
+                <div className="contact-method">
+                  <span className="contact-method-icon">
+                    <Phone size={21} />
+                  </span>
+                  <div>
+                    <h3>Call us</h3>
+                    {settings.support_phone ? (
+                      <a
+                        href={`tel:${settings.support_phone.startsWith('+') ? settings.support_phone : '+' + settings.support_phone}`}
+                      >
+                        {settings.support_phone}
+                      </a>
+                    ) : (
+                      <p>Phone details will be available soon.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {settings.support_hours && (
+                <div className="contact-hours">
+                  <Clock size={17} />
+                  <span>{settings.support_hours}</span>
+                </div>
               )}
-              {settings.support_phone && (
-                <p>
-                  Phone: <a href={`tel:${settings.support_phone}`}>{settings.support_phone}</a>
-                </p>
-              )}
-              {settings.support_hours && <p>{settings.support_hours}</p>}
-            </div>
+            </section>
           )}
           {page && <PageContent value={page.content} />}
         </article>

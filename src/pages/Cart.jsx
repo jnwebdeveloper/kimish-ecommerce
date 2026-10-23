@@ -85,10 +85,11 @@ export default function Cart({ cart, updateQty, removeFromCart }) {
                   <strong>₹{item.variant.price * item.qty}</strong>
                   <button
                     className="link-btn cart-remove"
+                    title="Remove item"
                     aria-label={`Remove ${item.product.name} from cart`}
                     onClick={() => removeFromCart(item)}
                   >
-                    <Trash2 size={14} /> Remove
+                    <Trash2 size={18} aria-hidden="true" />
                   </button>
                 </div>
               </div>

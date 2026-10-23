@@ -15,7 +15,6 @@ export default function ProductCard({ product, addToCart, toggleWishlist, isWish
       <div className="product-image-wrap">
         <div className="card-labels">
           {discount > 0 && <span className="card-saving">{discount}% OFF</span>}
-          {product.isNew && <span className="card-new">NEW</span>}
         </div>
         <button
           className={`wish-btn ${isWishlisted ? 'active' : ''}`}
@@ -32,6 +31,7 @@ export default function ProductCard({ product, addToCart, toggleWishlist, isWish
       <div className="product-info">
         <div className="card-meta">
           <span className="card-category">{product.category}</span>
+          {product.isNew && <span className="card-new card-new-inline">New arrival</span>}
           {Number(product.reviews) > 0 && (
             <span className="rating">
               <Star size={13} fill="currentColor" /> {product.rating}{' '}

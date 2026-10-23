@@ -220,3 +220,13 @@
     gap: 6px;
   }
 }
+
+.app .refined-product-card .card-new-inline {
+  padding: 0;
+  background: transparent;
+  color: #8a704b;
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: auto;
+  letter-spacing: 0.02em;
+}

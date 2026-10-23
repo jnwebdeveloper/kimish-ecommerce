@@ -67,15 +67,15 @@
   color: #516b43;
 }
 .app .refined-cart-page .cart-item .cart-pack-label {
-  font-size: 12px;
+  font-size: 15px;
   margin: 6px 0 12px;
   color: #716859;
 }
 .app .refined-cart-page .cart-pack-label > span {
   display: inline;
-  font-size: 11px;
+  font-size: 14px;
   margin: 0;
-  color: #908675;
+  color: #716859;
 }
 .app .refined-cart-page .qty {
   display: inline-flex;
@@ -161,4 +161,15 @@
   .app .refined-cart-page .cart-product-title {
     font-size: 14px;
   }
+}
+
+.app .refined-cart-page .cart-remove {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+.app .refined-cart-page .cart-remove:hover {
+  background: #f5eee7;
 }
