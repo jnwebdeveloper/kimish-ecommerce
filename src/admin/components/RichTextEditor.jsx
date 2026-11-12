@@ -17,7 +17,12 @@ const tools = [
   ['undo', '↶', 'Undo'],
   ['redo', '↷', 'Redo'],
 ]
-export default function RichTextEditor({ value = '', onChange, disabled = false }) {
+export default function RichTextEditor({
+  value = '',
+  onChange,
+  disabled = false,
+  label = 'Page content',
+}) {
   const [mode, setMode] = useState(isRichText(value) || !value ? 'rich' : 'plain')
   const [error, setError] = useState('')
   const editor = useRef(null),
@@ -139,7 +144,7 @@ export default function RichTextEditor({ value = '', onChange, disabled = false 
             ref={editor}
             className="page-editor-surface page-prose"
             role="textbox"
-            aria-label="Page content rich text"
+            aria-label={`${label} rich text`}
             aria-multiline="true"
             aria-required="true"
             aria-disabled={disabled}
@@ -166,7 +171,7 @@ export default function RichTextEditor({ value = '', onChange, disabled = false 
             Use the text area for simple copy. Editing here removes rich-text formatting.
           </p>
           <textarea
-            aria-label="Page content plain text"
+            aria-label={`${label} plain text`}
             value={contentText(value)}
             maxLength={20000}
             disabled={disabled}
@@ -182,7 +187,7 @@ export default function RichTextEditor({ value = '', onChange, disabled = false 
         </div>
       )}
       <div className="page-editor-footer">
-        <span>Headings, lists and links are supported. Save changes to update the page.</span>
+        <span>Headings, lists and links are supported. Save changes to update the content.</span>
         <span>{value.length.toLocaleString()} / 20,000</span>
       </div>
       {value.length > 20000 && (

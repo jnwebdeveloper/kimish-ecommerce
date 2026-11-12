@@ -101,3 +101,33 @@
     grid-template-columns: 1fr;
   }
 }
+
+.product-specifications {
+  margin: 40px 0;
+}
+.product-specifications dl {
+  margin: 20px 0;
+  border: 1px solid #dfd3c5;
+}
+.product-specifications dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  border-bottom: 1px solid #dfd3c5;
+}
+.product-specifications dl > div:last-child {
+  border-bottom: 0;
+}
+.product-specifications dt,
+.product-specifications dd {
+  margin: 0;
+  padding: 16px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.product-specifications dt {
+  font-weight: 600;
+  background: #faf6ef;
+}
+.product-description {
+  margin: 16px 0;
+}

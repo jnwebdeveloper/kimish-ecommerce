@@ -1,3 +1,5 @@
+import PageContent from '../components/PageContent'
+import { readSpecifications } from '../utils/specifications'
 import './ProductDetail.css'
 import StoreImage from '../components/StoreImage'
 import { useMemo, useState } from 'react'
@@ -32,6 +34,9 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
       </main>
     )
 
+  const specifications = readSpecifications(product.specifications).filter(
+    (row) => row.name.trim() && row.value.trim(),
+  )
   const variant = product.variants[variantIndex] || product.variants[0]
   const discount = Math.round((1 - variant.price / variant.mrp) * 100)
   const aboutItems = (product.about_item || '')
@@ -73,7 +78,7 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
             <Star size={16} fill="currentColor" /> {product.rating}{' '}
             <span>{product.reviews} reviews</span>
           </div>
-          <p>{product.description}</p>
+          <PageContent value={product.description} className="product-description" />
 
           <h4>Select Pack Size</h4>
           <div className="variant-list">
@@ -122,6 +127,19 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
         </div>
       </div>
 
+      {specifications.length > 0 && (
+        <section className="product-specifications" aria-labelledby="product-specifications-title">
+          <h2 id="product-specifications-title">Product specifications</h2>
+          <dl>
+            {specifications.map((row, index) => (
+              <div key={index}>
+                <dt>{row.name}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
       <section
         className={`product-facts product-information-section${aboutItems.length ? '' : ' without-about'}`}
         aria-label="Product information"

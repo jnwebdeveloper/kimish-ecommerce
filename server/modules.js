@@ -24,6 +24,7 @@ export const modules = {
       f('slug', 'URL slug', 'text', true),
       f('category_id', 'Category', 'categories', true),
       f('description', 'Description', 'textarea'),
+      f('specifications', 'Product specifications', 'textarea'),
       f('about_item', 'About this item (one bullet per line)', 'textarea'),
       f('ingredients', 'Ingredients', 'textarea'),
       f('storage', 'Storage', 'textarea'),
@@ -250,6 +251,29 @@ export function validate(module, body, creating) {
     if (String(v).length > 20000) throw new Error('Field is too long.')
     if (['image', 'link', 'url'].includes(field.name) && v && !/^(\/(?!\/)|https?:\/\/)/i.test(v))
       throw new Error('Use a relative path or http(s) URL.')
+    if (module === 'products' && field.name === 'specifications') {
+      let rows
+      try {
+        rows = JSON.parse(v || '[]')
+      } catch {
+        throw new Error('Invalid product specifications.')
+      }
+      if (
+        !Array.isArray(rows) ||
+        rows.some(
+          (row) =>
+            !row ||
+            typeof row.name !== 'string' ||
+            typeof row.value !== 'string' ||
+            !row.name.trim() ||
+            !row.value.trim(),
+        )
+      )
+        throw new Error('Each specification needs a name and value.')
+      v = JSON.stringify(
+        rows.map(({ name, value }) => ({ name: name.trim(), value: value.trim() })),
+      )
+    }
     result[field.name] = v
   }
   if (module === 'categories' && result.parent_id === 0) result.parent_id = null

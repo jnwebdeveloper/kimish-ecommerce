@@ -12,6 +12,9 @@ try {
   await client.query('BEGIN')
   await client.query(await readFile(new URL('../database/schema.sql', import.meta.url), 'utf8'))
   await client.query(
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS specifications text NOT NULL DEFAULT '[]'",
+  )
+  await client.query(
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS about_item text NOT NULL DEFAULT ''",
   )
   await client.query(

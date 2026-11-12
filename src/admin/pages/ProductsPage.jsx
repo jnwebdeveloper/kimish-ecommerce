@@ -1,3 +1,5 @@
+import RichTextEditor from '../components/RichTextEditor'
+import ProductSpecifications from '../components/ProductSpecifications'
 import { categoryPath } from '../../data/categoryHierarchy'
 import GalleryManager from '../components/GalleryManager'
 import ProductCategoryFields from '../components/ProductCategoryFields'
@@ -33,6 +35,22 @@ export default function ProductsPage() {
         },
       })}
       fieldOverrides={(references) => ({
+        description: (record, set) => (
+          <div className="admin-field-wide">
+            <h3>Product description</h3>
+            <RichTextEditor
+              label="Product description"
+              value={record.description || ''}
+              onChange={(value) => set('description', value)}
+            />
+          </div>
+        ),
+        specifications: (record, set) => (
+          <ProductSpecifications
+            value={record.specifications}
+            onChange={(value) => set('specifications', value)}
+          />
+        ),
         // Group → category → subcategory pickers instead of one long category list
         category_id: (record, set) => (
           <ProductCategoryFields

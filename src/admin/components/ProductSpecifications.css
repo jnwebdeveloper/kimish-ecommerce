@@ -1,0 +1,25 @@
+.product-specification-editor h3 {
+  margin: 0 0 8px;
+}
+.product-specification-editor p {
+  margin: 0 0 16px;
+}
+.product-specification-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+.product-specification-row input {
+  width: 100%;
+}
+@media (max-width: 600px) {
+  .product-specification-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .product-specification-row button {
+    justify-self: end;
+  }
+}

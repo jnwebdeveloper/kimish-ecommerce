@@ -40,7 +40,7 @@ export default function Seo() {
     const description =
       seo?.description ||
       (product
-        ? product.description || 'Shop premium Kimish products online.'
+        ? contentText(product.description) || 'Shop premium Kimish products online.'
         : gift
           ? gift.seo_description || gift.description
           : page

@@ -62,7 +62,7 @@ export const sectionFor = (f) =>
       ? 'Pricing & inventory'
       : /^(image|alt|sort_order)$/.test(f.name)
         ? 'Images & display'
-        : /^(seo_|description|about_item|ingredients|storage|contents|personalisation|content|body|subtitle)/.test(
+        : /^(seo_|specifications|description|about_item|ingredients|storage|contents|personalisation|content|body|subtitle)/.test(
               f.name,
             )
           ? 'Content & description'
