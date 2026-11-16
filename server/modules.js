@@ -1,3 +1,4 @@
+import { MEDIA_TYPE_VALUES, MEDIA_TYPES, mediaTypeOfUrl } from '../src/utils/media.js'
 const f = (name, label, type = 'text', required = false, options) => ({
   name,
   label,
@@ -28,7 +29,7 @@ export const modules = {
       f('about_item', 'About this item (one bullet per line)', 'textarea'),
       f('ingredients', 'Ingredients', 'textarea'),
       f('storage', 'Storage', 'textarea'),
-      f('image', 'Primary image URL'),
+      f('media_url', 'Main image URL'),
       f('bestseller', 'Bestseller', 'boolean'),
       f('featured', 'Featured', 'boolean'),
       f('is_new', 'New arrival', 'boolean'),
@@ -71,12 +72,13 @@ export const modules = {
       f('height_cm', 'Package height (cm)', 'number', true),
     ],
   },
-  product_images: {
-    label: 'Product Images',
+  product_media: {
+    label: 'Product Media',
     fields: [
       f('product_id', 'Product', 'products', true),
-      f('image', 'Image URL', 'text', true),
-      f('alt', 'Image description'),
+      f('media_url', 'Media URL', 'text', true),
+      f('media_type', 'Media type', 'select', true, MEDIA_TYPE_VALUES),
+      f('alt_text', 'Description'),
       f('sort_order', 'Display order', 'number'),
     ],
   },
@@ -249,8 +251,19 @@ export function validate(module, body, creating) {
       throw new Error(`${field.label} is required.`)
     if (field.options && !field.options.includes(v)) throw new Error(`Invalid ${field.label}.`)
     if (String(v).length > 20000) throw new Error('Field is too long.')
-    if (['image', 'link', 'url'].includes(field.name) && v && !/^(\/(?!\/)|https?:\/\/)/i.test(v))
+    if (
+      ['image', 'media_url', 'link', 'url'].includes(field.name) &&
+      v &&
+      !/^(\/(?!\/)|https?:\/\/)/i.test(v)
+    )
       throw new Error('Use a relative path or http(s) URL.')
+    // Main images are shown everywhere as pictures; videos belong in the product gallery
+    if (
+      module !== 'product_media' &&
+      ['image', 'media_url'].includes(field.name) &&
+      mediaTypeOfUrl(v) === MEDIA_TYPES.VIDEO
+    )
+      throw new Error(`${field.label} must be an image. Add videos to the product gallery.`)
     if (module === 'products' && field.name === 'specifications') {
       let rows
       try {

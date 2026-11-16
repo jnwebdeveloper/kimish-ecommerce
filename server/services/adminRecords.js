@@ -3,6 +3,8 @@ import { modules, validate } from '../modules.js'
 import { passwordHash } from '../password.js'
 import { automaticSlug } from '../slugs.js'
 import { audit } from './audit.js'
+import { MEDIA_FOLDERS, MEDIA_TYPES } from '../../src/utils/media.js'
+import { claimNewUploads, galleryInput, removeQuietly } from './media.js'
 import { restoreStock } from './orders.js'
 
 // Table names below always come from the modules.js definitions, never from request input
@@ -33,7 +35,45 @@ export async function listRecords(pool, module) {
     for (const item of items) byOrder.get(item.order_id)?.push(item)
     for (const row of rows) row.items = byOrder.get(row.id)
   }
+  if (module === 'products') {
+    // Each product's gallery (main image first), ordered for display
+    const media = (
+        await pool.query(
+          'SELECT * FROM product_media WHERE product_id=ANY($1::int[]) ORDER BY sort_order,id',
+          [rows.map((r) => r.id)],
+        )
+      ).rows,
+      byProduct = new Map(rows.map((r) => [r.id, []]))
+    for (const item of media) byProduct.get(item.product_id)?.push(item)
+    for (const row of rows) row.images = byProduct.get(row.id)
+  }
   return rows
+}
+
+// Replaces a product's gallery: the main image first (sort_order 0), then the others in order,
+// skipping repeated URLs. Removed files stay in storage (orders and other records may use them).
+async function replaceGallery(client, productId, mainUrl, gallery, productName) {
+  await client.query('DELETE FROM product_media WHERE product_id=$1', [productId])
+  const seen = new Set()
+  const rows = []
+  if (mainUrl) {
+    const own = gallery.find((g) => g.media_url === mainUrl)
+    rows.push({
+      media_url: mainUrl,
+      alt_text: own?.alt_text || productName,
+      media_type: MEDIA_TYPES.IMAGE,
+    })
+  }
+  rows.push(...gallery)
+  let order = 0
+  for (const item of rows) {
+    if (seen.has(item.media_url)) continue
+    seen.add(item.media_url)
+    await client.query(
+      'INSERT INTO product_media(product_id,media_url,alt_text,media_type,sort_order) VALUES($1,$2,$3,$4,$5)',
+      [productId, item.media_url, item.alt_text, item.media_type, order++],
+    )
+  }
 }
 
 // Categories: resolve the group name, and keep the tree to three levels without cycles
@@ -72,7 +112,9 @@ async function checkCategory(pool, values, id) {
 }
 
 // Creates (no id) or updates a record; returns { id }
-export async function saveRecord(pool, admin, module, id, input) {
+// storage (optional) renames files uploaded before the record had an ID; see claimNewUploads.
+// For products, input.images (when sent) replaces the gallery in the same transaction.
+export async function saveRecord(pool, admin, module, id, input, storage, log) {
   if (!modules[module] || module === 'orders')
     throw httpError(400, 'Use the order form to create orders.')
   const body = { ...input }
@@ -85,33 +127,74 @@ export async function saveRecord(pool, admin, module, id, input) {
     } else body.slug = automaticSlug(body.name || body.title)
   }
   const values = validated(module, body, !id)
+  const gallery = module === 'products' ? galleryInput(input.images) : undefined
+  // The main image comes first in the product's media list, so it must be a photo
+  if (gallery?.length && !values.media_url)
+    throw httpError(
+      400,
+      'The first item in Photos & videos must be a photo. Add a photo before saving.',
+    )
   if (module === 'categories') await checkCategory(pool, values, id)
   if (module === 'admins' && values.password) {
     values.password_hash = passwordHash(values.password)
     delete values.password
   }
-  return withTransaction(pool, async (client) => {
-    const keys = Object.keys(values)
-    const row = id
-      ? (
-          await client.query(
-            `UPDATE ${module} SET ${keys.map((k, i) => `${k}=$${i + 1}`).join(',')} WHERE id=$${keys.length + 1} RETURNING id`,
-            [...Object.values(values), id],
-          )
-        ).rows[0]
-      : (
-          await client.query(
-            `INSERT INTO ${module}(${keys.join(',')}) VALUES(${keys.map((_, i) => `$${i + 1}`).join(',')}) RETURNING id`,
-            Object.values(values),
-          )
-        ).rows[0]
-    if (!row) throw httpError(404, 'Not found.')
-    // A new password signs that administrator out everywhere
-    if (module === 'admins' && values.password_hash)
-      await client.query('DELETE FROM admin_sessions WHERE admin_id=$1', [row.id])
-    await audit(client, admin, id ? 'update' : 'create', module, row.id)
-    return row
-  })
+  // Storage objects copied during this save, and the new-… originals they replace
+  const tracker = { copied: [], originals: [] }
+  let row
+  try {
+    row = await withTransaction(pool, async (client) => {
+      const saved = await writeRecord(client, admin, module, id, values)
+      await attachMedia(client, storage, module, saved.id, values, gallery, tracker)
+      return saved
+    })
+  } catch (err) {
+    await removeQuietly(storage, tracker.copied, log)
+    throw err
+  }
+  await removeQuietly(storage, tracker.originals, log)
+  return row
+}
+
+// Renames new-… uploads now that the record has an ID, and saves a product's gallery
+async function attachMedia(client, storage, module, id, values, gallery, tracker) {
+  const folder = MEDIA_FOLDERS[module]
+  const fields = ['image', 'media_url'].filter((name) => values[name])
+  if (folder) {
+    const urls = [...fields.map((name) => values[name]), ...(gallery || []).map((g) => g.media_url)]
+    const renamed = await claimNewUploads(storage, folder, id, urls, tracker)
+    for (const name of fields)
+      if (renamed.has(values[name])) {
+        values[name] = renamed.get(values[name])
+        await client.query(`UPDATE ${module} SET ${name}=$1 WHERE id=$2`, [values[name], id])
+      }
+    for (const item of gallery || []) item.media_url = renamed.get(item.media_url) || item.media_url
+  }
+  if (module === 'products' && gallery)
+    await replaceGallery(client, id, values.media_url, gallery, values.name)
+}
+
+async function writeRecord(client, admin, module, id, values) {
+  const keys = Object.keys(values)
+  const row = id
+    ? (
+        await client.query(
+          `UPDATE ${module} SET ${keys.map((k, i) => `${k}=$${i + 1}`).join(',')} WHERE id=$${keys.length + 1} RETURNING id`,
+          [...Object.values(values), id],
+        )
+      ).rows[0]
+    : (
+        await client.query(
+          `INSERT INTO ${module}(${keys.join(',')}) VALUES(${keys.map((_, i) => `$${i + 1}`).join(',')}) RETURNING id`,
+          Object.values(values),
+        )
+      ).rows[0]
+  if (!row) throw httpError(404, 'Not found.')
+  // A new password signs that administrator out everywhere
+  if (module === 'admins' && values.password_hash)
+    await client.query('DELETE FROM admin_sessions WHERE admin_id=$1', [row.id])
+  await audit(client, admin, id ? 'update' : 'create', module, row.id)
+  return row
 }
 
 export async function deleteRecord(pool, admin, module, id) {

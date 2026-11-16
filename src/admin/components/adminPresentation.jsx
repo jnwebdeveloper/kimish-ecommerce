@@ -20,7 +20,7 @@ export const singular = {
 }
 export const listColumns = {
   seo_pages: ['title', 'path', 'description', 'active'],
-  products: ['image', 'name', 'category_id', 'price_range', 'inventory', 'active'],
+  products: ['media_url', 'name', 'category_id', 'price_range', 'inventory', 'active'],
   category_groups: ['name', 'sort_order', 'active'],
   categories: ['image', 'name', 'group_id', 'parent_id', 'active'],
   variants: ['product_id', 'weight', 'price', 'mrp', 'stock'],
@@ -60,7 +60,7 @@ export const sectionFor = (f) =>
           f.name,
         )
       ? 'Pricing & inventory'
-      : /^(image|alt|sort_order)$/.test(f.name)
+      : /^(image|media_url|media_type|alt|alt_text|sort_order)$/.test(f.name)
         ? 'Images & display'
         : /^(seo_|specifications|description|about_item|ingredients|storage|contents|personalisation|content|body|subtitle)/.test(
               f.name,
@@ -100,7 +100,7 @@ export function AdminDetails({ row, module, meta, references, valueFor }) {
   const sections = {}
   for (const key of Object.keys(row)) {
     if (
-      ['id', 'slug', 'image', 'items', 'customer_snapshot'].includes(key) ||
+      ['id', 'slug', 'image', 'media_url', 'images', 'items', 'customer_snapshot'].includes(key) ||
       /password|token|secret/.test(key) ||
       (module === 'navigation' && ['parent_id', 'menu_type'].includes(key))
     )
@@ -111,17 +111,15 @@ export function AdminDetails({ row, module, meta, references, valueFor }) {
   }
   const variants =
     module === 'products' ? (references.variants || []).filter((v) => v.product_id === row.id) : []
+  // The gallery comes with each product (main image first, which the hero already shows)
   const photos =
-    module === 'products'
-      ? (references.product_images || [])
-          .filter((i) => i.product_id === row.id)
-          .sort((a, b) => a.sort_order - b.sort_order)
-      : []
+    module === 'products' ? (row.images || []).filter((i) => i.media_url !== row.media_url) : []
+  const heroImage = row.image || row.media_url
   return (
     <div className="admin-detail-body">
-      {row.image && (
+      {heroImage && (
         <div className="admin-detail-hero">
-          <img src={row.image} alt={row.name || row.title || 'Record image'} />
+          <img src={heroImage} alt={row.name || row.title || 'Record image'} />
           <div>
             <span className="eyebrow">Primary image</span>
             <p>{row.name || row.title}</p>
@@ -233,8 +231,14 @@ export function AdminDetails({ row, module, meta, references, valueFor }) {
           <div className="admin-gallery-grid">
             {photos.map((i) => (
               <figure key={i.id}>
-                <img src={i.image} alt={i.alt || 'Product photo'} />
-                <figcaption>{i.alt || 'Product photo'}</figcaption>
+                {i.media_type === 'video' ? (
+                  <video src={i.media_url} controls preload="metadata" />
+                ) : (
+                  <img src={i.media_url} alt={i.alt_text || 'Product photo'} />
+                )}
+                <figcaption>
+                  {i.alt_text || (i.media_type === 'video' ? 'Product video' : 'Product photo')}
+                </figcaption>
               </figure>
             ))}
           </div>

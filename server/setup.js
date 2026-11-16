@@ -11,6 +11,10 @@ const pool = createPool(env),
 try {
   await client.query('BEGIN')
   await client.query(await readFile(new URL('../database/schema.sql', import.meta.url), 'utf8'))
+  // Older databases still have product_images and products.image; rename them before seeding
+  await client.query(
+    await readFile(new URL('./migrations/20261116_product_media.sql', import.meta.url), 'utf8'),
+  )
   await client.query(
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS specifications text NOT NULL DEFAULT '[]'",
   )
@@ -77,7 +81,7 @@ try {
         [p.category, p.category.toLowerCase(), group, groupId, p.images[0], index],
       )
       const prod = await client.query(
-        'INSERT INTO products(name,slug,category_id,description,ingredients,storage,image,bestseller,featured,is_new) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
+        'INSERT INTO products(name,slug,category_id,description,ingredients,storage,media_url,bestseller,featured,is_new) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
         [
           p.name,
           p.slug,

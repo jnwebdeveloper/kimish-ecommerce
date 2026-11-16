@@ -43,20 +43,16 @@ function storageBlock(env, n) {
   const name = v('NAME') || defaultNames[type]
   for (const field of required[type])
     if (!v(field)) fail(`storage ${n} (${name}): STORAGE_${n}_${field} is missing.`)
-  if (type === 'vercel-blob') {
-    const token = v('TOKEN') || value(env, 'BLOB_READ_WRITE_TOKEN')
-    if (!token)
-      fail(
-        `storage ${n} (${name}): set STORAGE_${n}_TOKEN or BLOB_READ_WRITE_TOKEN (added by Vercel when a Blob store is connected).`,
-      )
-    return { number: n, type, name, token, sharedToken: !v('TOKEN') }
-  }
+  // Vercel Blob can't take direct (presigned) uploads. A leftover block is accepted so the API still
+  // starts, but uploads stay off while it is the active storage (see createStorage).
+  if (type === 'vercel-blob') return { number: n, type, name, direct: false }
   checkUrl(`STORAGE_${n}_PUBLIC_URL`, v('PUBLIC_URL'))
   if (type === 'custom') checkUrl(`STORAGE_${n}_ENDPOINT`, v('ENDPOINT'))
   return {
     number: n,
     type,
     name,
+    direct: true,
     bucket: v('BUCKET'),
     keyId: v('KEY_ID'),
     secret: v('SECRET'),
@@ -115,11 +111,6 @@ export function readStorageConfig(env, warn = () => {}) {
   const storages = numbers.length
     ? numbers.map((n) => storageBlock(env, n))
     : legacyBlock(env, warn)
-
-  if (storages.filter((s) => s.type === 'vercel-blob' && s.sharedToken).length > 1)
-    fail(
-      'only one vercel-blob storage can use BLOB_READ_WRITE_TOKEN; give the others their own STORAGE_<n>_TOKEN.',
-    )
 
   const activeSetting = value(env, 'STORAGE_ACTIVE')
   if (!activeSetting) return { storages, active: storages[0] || null }

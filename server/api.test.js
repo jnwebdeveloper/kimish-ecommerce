@@ -57,7 +57,7 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
       name: 'QA Product',
       slug: 'qa-product',
       category_id: category,
-      image: '/products/kimish-cashew.png',
+      media_url: '/products/kimish-cashew.png',
       active: true,
       featured: true,
     })
@@ -72,9 +72,10 @@ test('PostgreSQL admin CRUD, public catalogue, checkout stock and authorization'
       breadth_cm: 20,
       height_cm: 10,
     })
-    await add('product_images', {
+    await add('product_media', {
       product_id: product,
-      image: '/products/kimish-cashew.png',
+      media_url: '/products/kimish-cashew.png',
+      media_type: 'image',
     })
     const customer = await add('customers', {
       name: 'QA Customer',

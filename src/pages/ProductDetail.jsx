@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../data/StoreContext'
 import ProductCard from '../components/ProductCard'
-import { Heart, ShieldCheck, Star, Truck } from 'lucide-react'
+import { Heart, Play, ShieldCheck, Star, Truck } from 'lucide-react'
 
 export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
   const { products } = useStore()
@@ -37,6 +37,11 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
   const specifications = readSpecifications(product.specifications).filter(
     (row) => row.name.trim() && row.value.trim(),
   )
+  // Photos and videos; older cached catalogues only have image URLs
+  const media = product.media?.length
+    ? product.media
+    : (product.images || []).map((url) => ({ url, type: 'image', alt: '' }))
+  const current = media[imageIndex] || media[0]
   const variant = product.variants[variantIndex] || product.variants[0]
   const discount = Math.round((1 - variant.price / variant.mrp) * 100)
   const aboutItems = (product.about_item || '')
@@ -49,26 +54,41 @@ export default function ProductDetail({ addToCart, toggleWishlist, wishlist }) {
       <div className="product-detail">
         <div className="detail-gallery">
           <div className="thumbs thumbs-vertical">
-            {product.images.map((img, i) => (
+            {media.map((item, i) => (
               <button
                 className={i === imageIndex ? 'active' : ''}
-                key={`${img}-${i}`}
+                key={`${item.url}-${i}`}
                 onClick={() => setImageIndex(i)}
+                aria-label={`${item.type === 'video' ? 'Play video' : 'Show photo'} ${i + 1}`}
               >
-                <StoreImage src={img} alt={`${product.name} view ${i + 1}`} />
+                {item.type === 'video' ? (
+                  <span className="thumb-video">
+                    <video src={item.url} muted playsInline preload="metadata" />
+                    <Play size={18} fill="currentColor" aria-hidden="true" />
+                  </span>
+                ) : (
+                  <StoreImage src={item.url} alt={item.alt || `${product.name} view ${i + 1}`} />
+                )}
               </button>
             ))}
           </div>
-          <StoreImage
-            className="detail-main-image"
-            src={
-              product.images[imageIndex] ||
-              product.images[0] ||
-              product.image ||
-              '/image-placeholder.svg'
-            }
-            alt={product.name}
-          />
+          {current?.type === 'video' ? (
+            <video
+              key={current.url}
+              className="detail-main-image detail-main-video"
+              src={current.url}
+              controls
+              playsInline
+              preload="metadata"
+              aria-label={current.alt || `${product.name} video`}
+            />
+          ) : (
+            <StoreImage
+              className="detail-main-image"
+              src={current?.url || '/image-placeholder.svg'}
+              alt={current?.alt || product.name}
+            />
+          )}
         </div>
 
         <div className="detail-info">

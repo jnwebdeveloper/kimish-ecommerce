@@ -79,7 +79,7 @@ test('Razorpay checkout: abandoned payments restore stock, verified payments are
       name: 'QA Razorpay Product',
       slug: 'qa-razorpay-product',
       category_id: category,
-      image: '/products/kimish-cashew.png',
+      media_url: '/products/kimish-cashew.png',
       active: true,
     })
     const variant = await add('variants', {

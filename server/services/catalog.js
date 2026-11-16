@@ -1,3 +1,20 @@
+import { MEDIA_TYPES } from '../../src/utils/media.js'
+
+// A product's gallery as { url, type, alt } (main image first), plus images: the picture URLs
+// alone, which cards, cart and checkout use. Products saved before the gallery held the main
+// image get it added in front.
+function productMedia(product, gallery) {
+  const media = gallery
+    .filter((m) => m.product_id === product.id)
+    .map((m) => ({ url: m.media_url, type: m.media_type, alt: m.alt_text }))
+  if (product.media_url && !media.some((m) => m.url === product.media_url))
+    media.unshift({ url: product.media_url, type: MEDIA_TYPES.IMAGE, alt: product.name })
+  return {
+    media,
+    images: media.filter((m) => m.type === MEDIA_TYPES.IMAGE).map((m) => m.url),
+  }
+}
+
 // Everything the storefront needs in one payload: published products (with variants and photos),
 // categories, coupons, banners, pages, menus, homepage sections, gift boxes, reviews and public settings
 export async function storeCatalog(pool) {
@@ -7,7 +24,7 @@ export async function storeCatalog(pool) {
     )
   ).rows
   const variants = (await pool.query('SELECT * FROM variants ORDER BY price,id')).rows
-  const images = (await pool.query('SELECT * FROM product_images ORDER BY sort_order,id')).rows
+  const gallery = (await pool.query('SELECT * FROM product_media ORDER BY sort_order,id')).rows
   const result = {
     products: products
       .map((p) => ({
@@ -15,10 +32,7 @@ export async function storeCatalog(pool) {
         isNew: p.is_new,
         rating: Number(p.rating).toFixed(1),
         reviews: Number(p.reviews),
-        images: [
-          p.image,
-          ...images.filter((i) => i.product_id === p.id).map((i) => i.image),
-        ].filter(Boolean),
+        ...productMedia(p, gallery),
         variants: variants
           .filter((v) => v.product_id === p.id)
           .map((v) => ({ ...v, price: Number(v.price), mrp: Number(v.mrp) })),

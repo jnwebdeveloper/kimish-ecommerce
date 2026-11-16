@@ -21,7 +21,10 @@ test('admin routes require a session and sensitive modules use the primary-admin
   ])
     assert.ok(records.includes(route), route)
 })
-test('gallery batch persists image field rather than URL field', () => {
-  assert.ok(gallery.includes('product_id:productId,image:url'))
-  assert.ok(gallery.includes('multipleaccept='))
+test('gallery keeps uploaded media on the product and accepts several photos and videos', () => {
+  assert.ok(gallery.includes('media_url:url,media_type:mediaType'))
+  assert.ok(gallery.includes("set('images',ordered)"))
+  assert.ok(gallery.includes("set('media_url',isImage(ordered[0])?ordered[0].media_url:'')"))
+  assert.ok(gallery.includes('multiple'))
+  assert.ok(gallery.includes('accept={acceptMedia}'))
 })

@@ -57,10 +57,10 @@ export const safeNext = (next) =>
 
 // Other lists each screen needs for dropdowns, names, price/stock columns, galleries and the manual order form
 export const referencesFor = {
-  products: ['categories', 'category_groups', 'variants', 'product_images'],
+  products: ['categories', 'category_groups', 'variants'],
   categories: ['categories', 'category_groups'],
   variants: ['products'],
-  product_images: ['products'],
+  product_media: ['products'],
   reviews: ['products'],
   addresses: ['customers'],
   orders: ['customers', 'products', 'variants'],
@@ -82,6 +82,8 @@ export const moduleOptions = {
   admins: {
     help: 'Manage staff accounts that can sign in to the back office and edit store data. Only the primary administrator can manage these accounts and view the activity log. These are not customer accounts.',
   },
+  // The main image is managed in the product's Photos & videos section
+  products: { hiddenFields: ['media_url'] },
   gift_boxes: { help: 'Manage gift box contents, pricing, inventory and shipping information.' },
   audit: { readOnly: true, title: 'Activity log' },
 }

@@ -6,7 +6,7 @@ import { deleteRecord, listRecords, saveRecord } from '../services/adminRecords.
 
 // Admin screens' data. Mounted at /api/admin after requireAdmin, and after the more specific
 // admin routers: /:module would otherwise also match paths like /session.
-export function adminRecordRoutes({ pool, env }) {
+export function adminRecordRoutes({ pool, env, storage }) {
   const router = express.Router()
   const guard = guardSensitive(env)
 
@@ -29,10 +29,22 @@ export function adminRecordRoutes({ pool, env }) {
     res.json(await listRecords(pool, req.params.module)),
   )
   router.post('/:module', guard, async (req, res) =>
-    res.json(await saveRecord(pool, req.admin, req.params.module, null, req.body)),
+    res.json(
+      await saveRecord(pool, req.admin, req.params.module, null, req.body, storage, req.log),
+    ),
   )
   router.put('/:module/:id', guard, async (req, res) =>
-    res.json(await saveRecord(pool, req.admin, req.params.module, req.params.id, req.body)),
+    res.json(
+      await saveRecord(
+        pool,
+        req.admin,
+        req.params.module,
+        req.params.id,
+        req.body,
+        storage,
+        req.log,
+      ),
+    ),
   )
   router.delete('/:module/:id', guard, async (req, res) => {
     await deleteRecord(pool, req.admin, req.params.module, Number(req.params.id))

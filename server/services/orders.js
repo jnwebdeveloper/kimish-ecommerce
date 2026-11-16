@@ -110,7 +110,7 @@ export async function placeOrder(ctx, body, admin = null, accountCustomer = null
     for (const [id, qty] of [...cartQuantities(body.items)].sort((a, b) => a[0] - b[0])) {
       const v = (
         await c.query(
-          'SELECT v.*,p.name,p.image,p.slug,p.active FROM variants v JOIN products p ON p.id=v.product_id WHERE v.id=$1 FOR UPDATE OF v',
+          'SELECT v.*,p.name,p.media_url image,p.slug,p.active FROM variants v JOIN products p ON p.id=v.product_id WHERE v.id=$1 FOR UPDATE OF v',
           [id],
         )
       ).rows[0]

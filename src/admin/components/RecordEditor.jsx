@@ -1,8 +1,9 @@
 import RichTextEditor from './RichTextEditor'
 import { contentText } from '../../utils/richText'
+import { mediaTypeOfUrl } from '../../utils/media'
 import { Fragment, useState } from 'react'
 import { apiRequest } from '../../data/StoreContext'
-import { acceptImages, isAllowedImage, uploadImage } from '../data/uploads'
+import { acceptImages, acceptMedia, folderFor, uploadMedia } from '../data/media'
 import { sectionFor, singular } from './adminPresentation'
 import Messages from './Messages'
 import Modal, { DialogHeading } from './Modal'
@@ -76,19 +77,26 @@ export default function RecordEditor({
     }
   }
 
+  // Where a file chosen in this editor is stored. Gallery rows (product_media) belong to their product.
+  const uploadTarget =
+    module === 'product_media'
+      ? { folder: folderFor('products'), recordId: record.product_id, allowVideo: true }
+      : { folder: folderFor(module), recordId: record.id, allowVideo: false }
+
   async function uploadField(file, field) {
     if (!file) return
     setError('')
-    if (!isAllowedImage(file)) {
-      setError('Select a JPG, PNG, WebP or AVIF image smaller than 8 MB.')
-      return
-    }
     setBusy(true)
     try {
-      const url = await uploadImage(file)
+      const { url, mediaType } = await uploadMedia(file, {
+        ...uploadTarget,
+        onProgress: (share) => setNotice(`Uploading ${file.name}: ${Math.round(share * 100)}%`),
+      })
       set(field, url)
-      setNotice('Image uploaded successfully. Save this record to keep it.')
+      if (module === 'product_media') set('media_type', mediaType)
+      setNotice('File uploaded. Save this record to keep it.')
     } catch (e) {
+      setNotice('')
       setError(e.message)
     } finally {
       setBusy(false)
@@ -199,25 +207,38 @@ export default function RecordEditor({
                     {f.label}
                     {f.required ? ' *' : ''}
                     {input(f)}
-                    {f.name === 'image' && (
+                    {['image', 'media_url'].includes(f.name) && uploadTarget.folder && (
                       <>
                         <input
                           aria-label={`Upload ${f.label}`}
                           type="file"
-                          accept={acceptImages}
-                          onChange={(e) => uploadField(e.target.files?.[0], f.name)}
+                          disabled={busy}
+                          accept={uploadTarget.allowVideo ? acceptMedia : acceptImages}
+                          onChange={(e) => {
+                            uploadField(e.target.files?.[0], f.name)
+                            e.target.value = ''
+                          }}
                         />
                         <small>
-                          Choose a JPG, PNG, WebP or AVIF image (up to 4.2 MB on the live site), or
-                          paste an image link.
+                          {uploadTarget.allowVideo
+                            ? 'Choose a JPG, PNG or WebP image (up to 8 MB) or an MP4 or WebM video (up to 50 MB), or paste a link.'
+                            : 'Choose a JPG, PNG or WebP image (up to 8 MB), or paste an image link.'}
                         </small>
-                        {record[f.name] && (
-                          <img
-                            src={record[f.name]}
-                            alt="Image preview"
-                            style={{ width: 110, height: 110, objectFit: 'contain' }}
-                          />
-                        )}
+                        {record[f.name] &&
+                          (mediaTypeOfUrl(record[f.name]) === 'video' ? (
+                            <video
+                              src={record[f.name]}
+                              controls
+                              preload="metadata"
+                              style={{ width: 160, height: 110 }}
+                            />
+                          ) : (
+                            <img
+                              src={record[f.name]}
+                              alt="Preview"
+                              style={{ width: 110, height: 110, objectFit: 'contain' }}
+                            />
+                          ))}
                       </>
                     )}
                   </label>
@@ -226,7 +247,7 @@ export default function RecordEditor({
             </div>
           </fieldset>
         ))}
-        {renderExtras?.({ record, busy, setBusy, setError, setNotice })}
+        {renderExtras?.({ record, set, busy, setBusy, setError, setNotice })}
         <Messages notice={notice} error={error} />
         <div className="admin-modal-actions">
           <button disabled={busy} className="btn btn-primary">

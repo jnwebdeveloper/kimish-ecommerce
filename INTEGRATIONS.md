@@ -22,7 +22,7 @@
 
 Run `npm run db:setup` after changing `.env`. It creates/migrates PostgreSQL and seeds storefront content.
 
-Core commerce tables: `categories`, `products`, `variants`, `product_images`, `customers`, `addresses`, `orders`, `order_items`, `payments`, `shipments`, `coupons`, `reviews`.
+Core commerce tables: `categories`, `products`, `variants`, `product_media`, `customers`, `addresses`, `orders`, `order_items`, `payments`, `shipments`, `coupons`, `reviews`.
 
 CMS/admin tables: `banners`, `content_sections`, `pages`, `navigation`, `gift_boxes`, `settings`, `admins`, `admin_sessions`, `audit_logs`.
 

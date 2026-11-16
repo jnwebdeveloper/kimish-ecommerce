@@ -76,7 +76,8 @@ export default function Seo() {
     })
     upsert('meta[property="og:url"]', { property: 'og:url', content: canonical.href })
     upsert('meta[name="twitter:card"]', { name: 'twitter:card', content: 'summary_large_image' })
-    const sharingImage = seo?.image || product?.image || gift?.image
+    const productImage = product?.media_url || product?.images?.[0]
+    const sharingImage = seo?.image || productImage || gift?.image
     if (sharingImage)
       upsert('meta[property="og:image"]', {
         property: 'og:image',
@@ -93,7 +94,7 @@ export default function Seo() {
             '@type': 'Product',
             name: product.name,
             description,
-            image: product.image ? [new URL(product.image, canonicalBase).href] : undefined,
+            image: productImage ? [new URL(productImage, canonicalBase).href] : undefined,
             url: canonical.href,
           }
         : {

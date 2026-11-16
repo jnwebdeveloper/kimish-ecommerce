@@ -13,7 +13,7 @@ export default function ProductsPage() {
   return (
     <ModulePage
       module="products"
-      help="Manage product information and photos here. Set pack sizes, prices and stock in Variants & Inventory."
+      help="Manage product information, photos and videos here. Set pack sizes, prices and stock in Variants & Inventory."
       formatters={(references) => ({
         category_id: (row) =>
           categoryPath(references.categories || [], row.category_id)
@@ -62,16 +62,13 @@ export default function ProductsPage() {
         ),
       })}
       validate={(record) =>
-        !record.category_id ? 'Choose a category before saving the product.' : ''
+        !record.category_id
+          ? 'Choose a category before saving the product.'
+          : record.images?.length && !record.media_url
+            ? 'The first item in Photos & videos must be a photo. Add a photo before saving.'
+            : ''
       }
-      renderEditorExtras={({ record, references, reload, ...editor }) => (
-        <GalleryManager
-          productId={record.id}
-          images={references.product_images}
-          reload={reload}
-          {...editor}
-        />
-      )}
+      renderEditorExtras={(editor) => <GalleryManager {...editor} />}
     />
   )
 }

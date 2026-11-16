@@ -12,7 +12,7 @@ import { adminAccountRoutes } from './routes/adminAccount.js'
 import { adminAuthRoutes } from './routes/adminAuth.js'
 import { adminOrderRoutes } from './routes/adminOrders.js'
 import { adminRecordRoutes } from './routes/adminRecords.js'
-import { adminUploadRoutes } from './routes/adminUploads.js'
+import { adminMediaRoutes } from './routes/adminMedia.js'
 import { checkoutRoutes } from './routes/checkout.js'
 import { paymentRoutes } from './routes/payments.js'
 import { storeRoutes } from './routes/store.js'
@@ -20,8 +20,8 @@ import { webhookRoutes } from './routes/webhooks.js'
 
 // Builds the Express API (used by the Vite dev server, server/start.js and the Vercel function).
 // Callers add the customer phone-login handler (auth.js) afterwards, so it runs after these routes.
-// Throws when the image storage configuration is invalid, so a misconfigured API doesn't start.
-// overrides.storage replaces the configured image storage (used by tests).
+// Throws when the media storage configuration is invalid, so a misconfigured API doesn't start.
+// overrides.storage replaces the configured media storage (used by tests).
 export function createApi(env, overrides = {}) {
   const pool = createPool(env)
   const origin = env.AUTH_ORIGIN || 'http://localhost:5173'
@@ -54,7 +54,7 @@ export function createApi(env, overrides = {}) {
     '/api/admin',
     adminAccountRoutes(ctx),
     adminOrderRoutes(ctx),
-    adminUploadRoutes(ctx),
+    adminMediaRoutes(ctx),
     adminRecordRoutes(ctx),
   )
 

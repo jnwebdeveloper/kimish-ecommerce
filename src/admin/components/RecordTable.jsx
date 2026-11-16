@@ -20,7 +20,7 @@ export default function RecordTable({
         sort?.key === key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'
       }
     >
-      {key === 'image' ? (
+      {['image', 'media_url'].includes(key) ? (
         labelFor(key, moduleMeta)
       ) : (
         <button className="admin-sort-heading" onClick={() => onSort(key)}>
@@ -48,11 +48,11 @@ export default function RecordTable({
               <td>{row.id}</td>
               {columns.map((c) => (
                 <td key={c}>
-                  {c === 'image' ? (
-                    row.image ? (
+                  {['image', 'media_url'].includes(c) ? (
+                    row[c] ? (
                       <img
                         className="admin-product-thumb"
-                        src={row.image}
+                        src={row[c]}
                         alt={row.name || 'Product'}
                       />
                     ) : (

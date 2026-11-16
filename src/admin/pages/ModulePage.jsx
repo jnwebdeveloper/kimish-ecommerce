@@ -17,7 +17,7 @@ import { useAdminSession } from '../session/AdminSession'
 //   formatters        column display overrides: { column: (row) => value }, or (references) => that
 //   fieldOverrides    editor input overrides: { field: (record, set) => element }, or (references) => that
 //   validate          (record) => error message that blocks saving
-//   renderEditorExtras  ({ record, busy, setBusy, setError, setNotice, references, reload }) => element
+//   renderEditorExtras  ({ record, set, busy, setBusy, setError, setNotice, references, reload }) => element
 //   AddDialog         replaces the Add editor: ({ references, onClose, onCreated }) => element
 //   renderDetailsExtras  ({ row, reload }) => element shown in the record details dialog
 export default function ModulePage({
@@ -59,7 +59,7 @@ export default function ModulePage({
   const withReferences = (value) => (typeof value === 'function' ? value(references) : value)
   const valueFor = makeFieldValue(moduleMeta, references, withReferences(formatters))
   const columns = listColumns[module] || []
-  const filterColumns = ['id', ...columns.filter((key) => key !== 'image')]
+  const filterColumns = ['id', ...columns.filter((key) => !['image', 'media_url'].includes(key))]
   const displayValue = (row, key) => {
     if (typeof row[key] === 'boolean')
       return row[key] ? (key === 'active' ? 'Published' : 'Yes') : key === 'active' ? 'Draft' : 'No'
