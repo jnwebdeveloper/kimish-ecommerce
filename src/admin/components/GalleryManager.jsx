@@ -14,7 +14,15 @@ function withPhotoFirst(items) {
 // The product's photos and videos in one list, reordered with the arrows. The first item is the main
 // image (products.media_url) and must be a photo. Files upload straight away; "Save changes" saves the list.
 // record/set/busy/setBusy/setError/setNotice belong to the editor dialog.
-export default function GalleryManager({ record, set, busy, setBusy, setError, setNotice }) {
+export default function GalleryManager({
+  record,
+  set,
+  uploads,
+  busy,
+  setBusy,
+  setError,
+  setNotice,
+}) {
   const [progress, setProgress] = useState('')
   const [link, setLink] = useState('')
   // Products saved before the gallery held the main image: show it at the front
@@ -48,6 +56,13 @@ export default function GalleryManager({ record, set, busy, setBusy, setError, s
   }
   const firstPhotoOnly =
     "A video can't be first: the first item is the main image and must be a photo."
+  // A file uploaded in this session and not saved yet is deleted from storage right away. Saved
+  // files are only taken off the list; the API deletes them from storage when you save.
+  const remove = (index) => {
+    const item = items[index]
+    if (uploads.isNew(item.upload_key)) uploads.discard(item.upload_key)
+    update(items.filter((_, i) => i !== index))
+  }
   const add = (added) => {
     const known = new Set(items.map((i) => i.media_url))
     update([...items, ...added.filter((i) => !known.has(i.media_url))])
@@ -60,7 +75,7 @@ export default function GalleryManager({ record, set, busy, setBusy, setError, s
     const added = []
     try {
       for (const [n, file] of files.entries()) {
-        const { url, mediaType } = await uploadMedia(file, {
+        const { url, mediaType, key } = await uploadMedia(file, {
           folder: folderFor('products'),
           recordId: record.id,
           onProgress: (share) =>
@@ -72,7 +87,8 @@ export default function GalleryManager({ record, set, busy, setBusy, setError, s
             e.message.startsWith(file.name) ? e.message : `${file.name}: ${e.message}`,
           )
         })
-        added.push({ media_url: url, media_type: mediaType, alt_text: '' })
+        uploads.track(key)
+        added.push({ media_url: url, media_type: mediaType, alt_text: '', upload_key: key })
       }
     } catch (e) {
       setError(
@@ -106,7 +122,8 @@ export default function GalleryManager({ record, set, busy, setBusy, setError, s
       <p className="admin-media-help">
         Use the arrows to set the order. The first item is the main image, shown on product cards,
         in the cart and in search results, so it must be a photo. The product page shows everything
-        in this order. Changes are kept when you click Save changes.
+        in this order. Changes are kept when you click Save changes, and removed files are deleted
+        from storage then.
       </p>
       {!!items.length && !hasMain && (
         <p className="error" role="alert">
@@ -171,11 +188,7 @@ export default function GalleryManager({ record, set, busy, setBusy, setError, s
                   >
                     →
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => update(items.filter((_, n) => n !== i))}
-                  >
+                  <button type="button" disabled={busy} onClick={() => remove(i)}>
                     Remove
                   </button>
                 </div>

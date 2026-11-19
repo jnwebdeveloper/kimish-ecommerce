@@ -4,7 +4,13 @@ import { passwordHash } from '../password.js'
 import { automaticSlug } from '../slugs.js'
 import { audit } from './audit.js'
 import { MEDIA_FOLDERS, MEDIA_TYPES } from '../../src/utils/media.js'
-import { claimNewUploads, galleryInput, removeQuietly } from './media.js'
+import {
+  claimNewUploads,
+  deleteUnusedMedia,
+  galleryInput,
+  removeQuietly,
+  storageOf,
+} from './media.js'
 import { restoreStock } from './orders.js'
 
 // Table names below always come from the modules.js definitions, never from request input
@@ -51,9 +57,15 @@ export async function listRecords(pool, module) {
 }
 
 // Replaces a product's gallery: the main image first (sort_order 0), then the others in order,
-// skipping repeated URLs. Removed files stay in storage (orders and other records may use them).
-async function replaceGallery(client, productId, mainUrl, gallery, productName) {
-  await client.query('DELETE FROM product_media WHERE product_id=$1', [productId])
+// skipping repeated URLs. Each row records which storage holds its file (NULL for external links).
+// Returns the rows that were dropped, so their files can be deleted after the save commits.
+async function replaceGallery(client, storage, productId, mainUrl, gallery, productName) {
+  const previous = (
+    await client.query(
+      'DELETE FROM product_media WHERE product_id=$1 RETURNING media_url,storage_number,storage_key',
+      [productId],
+    )
+  ).rows
   const seen = new Set()
   const rows = []
   if (mainUrl) {
@@ -69,11 +81,21 @@ async function replaceGallery(client, productId, mainUrl, gallery, productName) 
   for (const item of rows) {
     if (seen.has(item.media_url)) continue
     seen.add(item.media_url)
+    const place = storageOf(storage, item.media_url)
     await client.query(
-      'INSERT INTO product_media(product_id,media_url,alt_text,media_type,sort_order) VALUES($1,$2,$3,$4,$5)',
-      [productId, item.media_url, item.alt_text, item.media_type, order++],
+      'INSERT INTO product_media(product_id,media_url,alt_text,media_type,sort_order,storage_number,storage_key) VALUES($1,$2,$3,$4,$5,$6,$7)',
+      [
+        productId,
+        item.media_url,
+        item.alt_text,
+        item.media_type,
+        order++,
+        place.storage_number,
+        place.storage_key,
+      ],
     )
   }
+  return previous.filter((row) => !seen.has(row.media_url))
 }
 
 // Categories: resolve the group name, and keep the tree to three levels without cycles
@@ -139,8 +161,9 @@ export async function saveRecord(pool, admin, module, id, input, storage, log) {
     values.password_hash = passwordHash(values.password)
     delete values.password
   }
-  // Storage objects copied during this save, and the new-… originals they replace
-  const tracker = { copied: [], originals: [] }
+  // Storage objects copied during this save, the new-… originals they replace, and gallery files
+  // the save dropped (deleted once nothing else uses them)
+  const tracker = { copied: [], originals: [], dropped: [] }
   let row
   try {
     row = await withTransaction(pool, async (client) => {
@@ -153,6 +176,7 @@ export async function saveRecord(pool, admin, module, id, input, storage, log) {
     throw err
   }
   await removeQuietly(storage, tracker.originals, log)
+  if (tracker.dropped.length) await deleteUnusedMedia(pool, storage, tracker.dropped, log)
   return row
 }
 
@@ -171,7 +195,9 @@ async function attachMedia(client, storage, module, id, values, gallery, tracker
     for (const item of gallery || []) item.media_url = renamed.get(item.media_url) || item.media_url
   }
   if (module === 'products' && gallery)
-    await replaceGallery(client, id, values.media_url, gallery, values.name)
+    tracker.dropped.push(
+      ...(await replaceGallery(client, storage, id, values.media_url, gallery, values.name)),
+    )
 }
 
 async function writeRecord(client, admin, module, id, values) {
@@ -197,11 +223,20 @@ async function writeRecord(client, admin, module, id, values) {
   return row
 }
 
-export async function deleteRecord(pool, admin, module, id) {
+// Deleting a product also deletes its media files from storage, unless another record uses them
+export async function deleteRecord(pool, admin, module, id, storage, log) {
   requireModule(module)
   if (module === 'admins' && id === admin.id)
     throw httpError(400, 'You cannot delete your own administrator account.')
+  let media = []
   await withTransaction(pool, async (c) => {
+    if (module === 'products')
+      media = (
+        await c.query(
+          'SELECT media_url,storage_number,storage_key FROM product_media WHERE product_id=$1',
+          [id],
+        )
+      ).rows
     if (module === 'orders') {
       // Deleting an order that hasn't been delivered or cancelled puts its stock back
       const row = (await c.query('SELECT status FROM orders WHERE id=$1 FOR UPDATE', [id])).rows[0]
@@ -211,6 +246,7 @@ export async function deleteRecord(pool, admin, module, id) {
     if (!result.rowCount) throw httpError(404, 'Not found.')
     await audit(c, admin, 'delete', module, id)
   })
+  if (media.length && storage) await deleteUnusedMedia(pool, storage, media, log)
 }
 
 // Status, payment, tracking and notes; cancelling restores stock once, and cancelled orders stay cancelled

@@ -82,7 +82,7 @@ export async function confirmUpload(storage, key, log) {
     await discard(
       `${kind === MEDIA_TYPES.VIDEO ? 'Videos' : 'Images'} must be ${formatBytes(MEDIA_LIMITS[kind])} or smaller.`,
     )
-  return { url: storage.urlFor(key), mediaType: kind }
+  return { url: storage.urlFor(key), mediaType: kind, key }
 }
 
 const validUrl = (url) => /^(\/(?!\/)|https?:\/\/)/i.test(url) && url.length <= 2000
@@ -132,4 +132,66 @@ export async function claimNewUploads(storage, folder, id, urls, tracker) {
 export async function removeQuietly(storage, keys, log) {
   for (const key of keys)
     await storage.remove(key).catch((err) => log?.warn('Could not delete media file', { key, err }))
+}
+
+// Where a URL's file is stored: { storage_number, storage_key } for files we uploaded to a
+// configured storage, or nulls for external links and files in the site's public folder
+export function storageOf(storage, url) {
+  const found = storage?.locate?.(url)
+  return found && MEDIA_KEY.test(found.key)
+    ? { storage_number: found.number, storage_key: found.key }
+    : { storage_number: null, storage_key: null }
+}
+
+// Whether any record still shows this file (matched by URL, or by key in case the public URL changed)
+export async function mediaInUse(db, url, key, number) {
+  const { rows } = await db.query(
+    `SELECT EXISTS (SELECT 1 FROM product_media WHERE media_url=$1 OR (storage_key=$2 AND storage_number=$3))
+      OR EXISTS (SELECT 1 FROM products WHERE media_url=$1 OR media_url LIKE '%/' || $2)
+      OR EXISTS (SELECT 1 FROM categories WHERE image=$1 OR image LIKE '%/' || $2)
+      OR EXISTS (SELECT 1 FROM banners WHERE image=$1 OR image LIKE '%/' || $2)
+      OR EXISTS (SELECT 1 FROM content_sections WHERE image=$1 OR image LIKE '%/' || $2)
+      OR EXISTS (SELECT 1 FROM gift_boxes WHERE image=$1 OR image LIKE '%/' || $2)
+      OR EXISTS (SELECT 1 FROM seo_pages WHERE image=$1 OR image LIKE '%/' || $2) AS used`,
+    [url, key, number],
+  )
+  return rows[0].used
+}
+
+// Deletes files that were removed from records, once nothing uses them any more. Only files we
+// uploaded (a known storage and an API-issued key) are deleted; external links are left alone.
+// files: [{ media_url, storage_number, storage_key }]. Failures are logged and skipped.
+export async function deleteUnusedMedia(db, storage, files, log) {
+  const deleted = []
+  if (!storage?.removeFrom) return deleted
+  for (const file of files) {
+    const place =
+      file.storage_number && file.storage_key
+        ? { storage_number: file.storage_number, storage_key: file.storage_key }
+        : storageOf(storage, file.media_url)
+    if (!place.storage_number || !MEDIA_KEY.test(place.storage_key)) continue
+    try {
+      if (await mediaInUse(db, file.media_url, place.storage_key, place.storage_number)) continue
+      if (await storage.removeFrom(place.storage_number, place.storage_key))
+        deleted.push(place.storage_key)
+    } catch (err) {
+      log?.warn('Could not delete media file', { key: place.storage_key, err })
+    }
+  }
+  if (deleted.length) log?.info('Deleted unused media files', { keys: deleted })
+  return deleted
+}
+
+// Deletes uploads from an editor that were never saved (removed before saving, or the editor was
+// closed). Files any record uses are kept, so this can't delete saved media.
+export async function discardUploads(db, storage, keys, log) {
+  if (!Array.isArray(keys) || keys.length > 100) throw httpError(400, 'Invalid upload keys.')
+  if (keys.some((key) => typeof key !== 'string' || !MEDIA_KEY.test(key)))
+    throw httpError(400, 'Invalid upload key.')
+  const files = keys.map((key) => ({
+    media_url: storage.urlFor(key),
+    storage_number: storage.number,
+    storage_key: key,
+  }))
+  return deleteUnusedMedia(db, storage, files, log)
 }

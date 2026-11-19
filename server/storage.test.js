@@ -57,6 +57,27 @@ test('storage configuration: blocks, active storage, legacy R2 and startup error
   })
   assert.equal(config.active.name, 'Backup R2')
 
+  // Files are found in whichever configured storage their URL belongs to, active or not
+  const both = createStorage(
+    {
+      ...r2(1, { STORAGE_1_PUBLIC_URL: 'https://old.example.com' }),
+      ...r2(2, { STORAGE_2_PUBLIC_URL: 'https://new.example.com' }),
+      STORAGE_ACTIVE: '2',
+    },
+    silent,
+  )
+  assert.equal(both.number, 2)
+  assert.deepEqual(both.locate('https://old.example.com/products/a.png'), {
+    number: 1,
+    key: 'products/a.png',
+  })
+  assert.deepEqual(both.locate('https://new.example.com/banners/b.webp'), {
+    number: 2,
+    key: 'banners/b.webp',
+  })
+  assert.equal(both.locate('https://elsewhere.example.com/products/a.png'), null)
+  assert.equal(both.locate('/products/kimish-cashew.png'), null)
+
   // Every declared block must be complete and valid; errors name the variable, never its value
   throwsMentioning({ ...r2(1), STORAGE_1_SECRET: '' }, 'STORAGE_1_SECRET is missing')
   throwsMentioning({ ...r2(1), STORAGE_1_ACCOUNT_ID: '' }, 'STORAGE_1_ACCOUNT_ID is missing')
@@ -202,8 +223,18 @@ function memoryStorage() {
     removed: [],
     enabled: true,
     active: { number: 1, name: 'Test storage', type: 'r2' },
+    number: 1,
     urlFor: (key) => base + key,
     keyFromUrl: (url) => (url?.startsWith(base) ? url.slice(base.length) : null),
+    locate(url) {
+      const key = this.keyFromUrl(url)
+      return key ? { number: 1, key } : null
+    },
+    async removeFrom(number, key) {
+      if (number !== 1) return false
+      await this.remove(key)
+      return true
+    },
     async signUpload({ key }) {
       return 'https://upload.example.com/' + key + '?signed'
     },
@@ -345,7 +376,7 @@ test('media sign and confirm endpoints', async () => {
     k = key('jpg')
     storage.objects.set(k, PNG)
     r = await confirm(k)
-    assert.deepEqual(r.data, { url: 'https://media.example.com/' + k, mediaType: 'image' })
+    assert.deepEqual(r.data, { url: 'https://media.example.com/' + k, mediaType: 'image', key: k })
     k = key('mp4', '9-')
     storage.objects.set(k, MP4)
     assert.equal((await confirm(k)).data.mediaType, 'video')
@@ -356,6 +387,15 @@ test('media sign and confirm endpoints', async () => {
     k = key('webp')
     storage.objects.set(k, WEBM)
     assert.equal((await confirm(k)).status, 400)
+
+    // Discard: deletes uploads nothing uses; only API-issued keys are accepted
+    for (const keys of [['../etc/passwd'], ['products/x.png'], 'products/a.png', [42]])
+      assert.equal((await app.call('/api/admin/media/discard', { keys })).status, 400)
+    k = key('webp')
+    storage.objects.set(k, WEBP)
+    r = await app.call('/api/admin/media/discard', { keys: [k] })
+    assert.deepEqual([r.status, r.data.deleted], [200, [k]])
+    assert.ok(!storage.objects.has(k))
 
     // Too big for its kind: refused and deleted
     k = key('png')
@@ -459,6 +499,21 @@ test('saving a new product renames new-… uploads and saves the gallery in orde
       assert.ok(storage.objects.has(storage.keyFromUrl(g.media_url)))
     }
     assert.equal(gallery[3].media_url, '/products/kimish-cashew.png')
+    // Each row records where its file is stored; external files have no storage
+    const places = (
+      await app.pool.query(
+        'SELECT storage_number,storage_key FROM product_media WHERE product_id=$1 ORDER BY sort_order,id',
+        [id],
+      )
+    ).rows
+    assert.deepEqual(
+      places.map((p) => p.storage_number),
+      [1, 1, 1, null],
+    )
+    assert.deepEqual(
+      places.map((p) => p.storage_key),
+      [...gallery.slice(0, 3).map((g) => storage.keyFromUrl(g.media_url)), null],
+    )
     // The new-… originals are deleted after the save
     assert.deepEqual(storage.removed.sort(), [main.key, video.key, photo.key].sort())
 
@@ -469,7 +524,15 @@ test('saving a new product renames new-… uploads and saves the gallery in orde
       gallery.map((g) => g.media_url),
     )
 
-    // Editing the product: a removed gallery item is dropped from the list but stays in storage
+    // Discard never deletes a saved file
+    r = await app.call('/api/admin/media/discard', { keys: [storage.keyFromUrl(saved.media_url)] })
+    assert.deepEqual(r.data.deleted, [])
+
+    // Editing the product: removed files are deleted from storage after the save, unless another
+    // record uses them; external files are only removed from the list
+    const photoUrl = gallery[2].media_url
+    const videoUrl = gallery[1].media_url
+    await app.pool.query('UPDATE categories SET image=$1 WHERE id=$2', [photoUrl, categoryId])
     storage.removed.length = 0
     r = await app.call(
       `/api/admin/products/${id}`,
@@ -487,7 +550,18 @@ test('saving a new product renames new-… uploads and saves the gallery in orde
       after.map((g) => g.media_type),
       ['image', 'video'],
     )
+    // The photo is still the category's image, so it stays
     assert.equal(storage.removed.length, 0)
+    assert.ok(storage.objects.has(storage.keyFromUrl(photoUrl)))
+
+    // Removing the video deletes its file
+    r = await app.call(
+      `/api/admin/products/${id}`,
+      { ...product, media_url: saved.media_url, images: [] },
+      'PUT',
+    )
+    assert.equal(r.status, 200, JSON.stringify(r))
+    assert.deepEqual(storage.removed, [storage.keyFromUrl(videoUrl)])
 
     // A missing upload stops the save and leaves nothing behind
     const lost = `https://media.example.com/products/new-${crypto.randomUUID()}.png`
@@ -501,6 +575,13 @@ test('saving a new product renames new-… uploads and saves the gallery in orde
       (await app.pool.query('SELECT media_url FROM products WHERE id=$1', [id])).rows[0].media_url,
       saved.media_url,
     )
+
+    // Deleting the product deletes its files
+    storage.removed.length = 0
+    r = await app.call(`/api/admin/products/${id}`, null, 'DELETE')
+    assert.equal(r.status, 200)
+    created.pop()
+    assert.deepEqual(storage.removed, [storage.keyFromUrl(saved.media_url)])
   } finally {
     for (const [module, id] of created.reverse())
       await app.call(`/api/admin/${module}/${id}`, null, 'DELETE')

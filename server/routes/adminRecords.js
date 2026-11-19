@@ -47,7 +47,7 @@ export function adminRecordRoutes({ pool, env, storage }) {
     ),
   )
   router.delete('/:module/:id', guard, async (req, res) => {
-    await deleteRecord(pool, req.admin, req.params.module, Number(req.params.id))
+    await deleteRecord(pool, req.admin, req.params.module, Number(req.params.id), storage, req.log)
     res.json({ ok: true })
   })
 

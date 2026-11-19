@@ -1,10 +1,10 @@
 import express from 'express'
 import { httpError } from '../lib/http.js'
-import { confirmUpload, uploadRequest } from '../services/media.js'
+import { confirmUpload, discardUploads, uploadRequest } from '../services/media.js'
 
 // Admin media uploads. The browser sends files straight to storage (R2/S3) with a signed link,
 // so files never pass through the API. Mounted at /api/admin after requireAdmin.
-export function adminMediaRoutes({ storage }) {
+export function adminMediaRoutes({ pool, storage }) {
   const router = express.Router()
   const requireStorage = (_req, _res, next) => {
     if (!storage.enabled)
@@ -46,6 +46,12 @@ export function adminMediaRoutes({ storage }) {
     }
     req.log.info('Media uploaded', { storage: storage.active?.name, key: req.body.key })
     res.json(result)
+  })
+
+  // Body: { keys }. Deletes uploads that were never saved; files any record uses are kept.
+  router.post('/media/discard', requireStorage, async (req, res) => {
+    const deleted = await discardUploads(pool, storage, req.body?.keys, req.log)
+    res.json({ deleted })
   })
 
   return router

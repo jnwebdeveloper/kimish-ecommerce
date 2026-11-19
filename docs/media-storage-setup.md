@@ -24,8 +24,27 @@ Files are named `<folder>/<record id>-<random id>.<ext>`, for example
 named `products/new-<random id>.<ext>`. When the product is saved they are copied to the
 `<id>-` name and the `new-` copies are deleted.
 
-Removing a photo or video from a gallery does **not** delete the file from R2, because orders and
-other records may still point to it.
+### When files are deleted
+
+Each `product_media` row records where its file lives: `storage_number` (the `STORAGE_<n>` it was
+uploaded to) and `storage_key` (its name in that bucket). Both are empty for external links and
+files in the site's `public/` folder, which are never deleted.
+
+| What happens                                           | What is deleted from the bucket                               |
+| ------------------------------------------------------ | ------------------------------------------------------------- |
+| You remove a file you uploaded in this editing session | The file, straight away                                       |
+| You close the editor without saving                    | Every file uploaded in that session that wasn't saved         |
+| You remove a saved file and click **Save changes**     | The file, after the save, unless another record still uses it |
+| You delete a product                                   | Its files, unless another record still uses them              |
+| You remove an external link or a `/products/...` file  | Nothing; it is only taken off the product                     |
+
+"Another record" means another product, a category, a banner, a homepage section, a gift box or an
+SEO page. Orders don't store image URLs, so old orders are never affected. Deleted files can't be
+recovered, because R2 has no recycle bin. If a delete fails, it is logged and the file stays.
+
+If the browser closes before an editor is closed, its unsaved uploads stay in the bucket. To clean
+those up automatically, add an R2 lifecycle rule (**Settings → Object lifecycle rules**) that deletes
+objects with the prefix `products/new-` after 7 days.
 
 ## 1. Create the buckets
 
@@ -131,6 +150,15 @@ If the CORS rule is missing or wrong, the admin shows "The upload could not reac
 browser console shows a CORS error for the `PUT` request.
 
 ## 6. Update the database
+
+For a database that already has `product_media`, add the storage columns:
+
+```sql
+ALTER TABLE product_media ADD COLUMN IF NOT EXISTS storage_number integer;
+ALTER TABLE product_media ADD COLUMN IF NOT EXISTS storage_key text;
+```
+
+Existing rows keep these empty; files from your buckets are still found by their URL when deleted.
 
 The gallery table is now `product_media` (columns `media_url`, `alt_text`, `sort_order` and
 `media_type`, which is `image`, `video` or `other`). The products' main image column is now

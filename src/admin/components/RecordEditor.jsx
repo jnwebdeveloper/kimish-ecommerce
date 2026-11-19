@@ -1,9 +1,9 @@
 import RichTextEditor from './RichTextEditor'
 import { contentText } from '../../utils/richText'
 import { mediaTypeOfUrl } from '../../utils/media'
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { apiRequest } from '../../data/StoreContext'
-import { acceptImages, acceptMedia, folderFor, uploadMedia } from '../data/media'
+import { acceptImages, acceptMedia, discardMedia, folderFor, uploadMedia } from '../data/media'
 import { sectionFor, singular } from './adminPresentation'
 import Messages from './Messages'
 import Modal, { DialogHeading } from './Modal'
@@ -42,6 +42,23 @@ export default function RecordEditor({
     [error, setError] = useState(''),
     [notice, setNotice] = useState('')
   const set = (name, value) => setRecord((prev) => ({ ...prev, [name]: value }))
+  // Files uploaded while this editor is open. When it closes (saved or cancelled) they are sent to
+  // the discard endpoint, which deletes only the ones no record ended up using.
+  const sessionUploads = useRef(new Set())
+  const uploads = {
+    track: (key) => key && sessionUploads.current.add(key),
+    isNew: (key) => Boolean(key) && sessionUploads.current.has(key),
+    discard: (key) => {
+      sessionUploads.current.delete(key)
+      return discardMedia([key]).catch(() => {})
+    },
+  }
+  useEffect(() => {
+    const pending = sessionUploads.current
+    return () => {
+      discardMedia([...pending]).catch(() => {})
+    }
+  }, [])
 
   const sections = Object.entries(
     moduleMeta.fields
@@ -88,10 +105,11 @@ export default function RecordEditor({
     setError('')
     setBusy(true)
     try {
-      const { url, mediaType } = await uploadMedia(file, {
+      const { url, mediaType, key } = await uploadMedia(file, {
         ...uploadTarget,
         onProgress: (share) => setNotice(`Uploading ${file.name}: ${Math.round(share * 100)}%`),
       })
+      uploads.track(key)
       set(field, url)
       if (module === 'product_media') set('media_type', mediaType)
       setNotice('File uploaded. Save this record to keep it.')
@@ -247,7 +265,7 @@ export default function RecordEditor({
             </div>
           </fieldset>
         ))}
-        {renderExtras?.({ record, set, busy, setBusy, setError, setNotice })}
+        {renderExtras?.({ record, set, uploads, busy, setBusy, setError, setNotice })}
         <Messages notice={notice} error={error} />
         <div className="admin-modal-actions">
           <button disabled={busy} className="btn btn-primary">

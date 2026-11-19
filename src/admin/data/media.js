@@ -32,7 +32,7 @@ function put(url, headers, file, onProgress) {
   })
 }
 
-// Uploads an image or video for a record and returns { url, mediaType }.
+// Uploads an image or video for a record and returns { url, mediaType, key }.
 // recordId is the saved record's ID; leave it out for a record that hasn't been saved yet.
 export async function uploadMedia(file, { folder, recordId, allowVideo = true, onProgress } = {}) {
   const problem = fileProblem(file, { allowVideo })
@@ -46,3 +46,8 @@ export async function uploadMedia(file, { folder, recordId, allowVideo = true, o
   await put(signed.uploadUrl, signed.headers, file, onProgress)
   return apiRequest('/api/admin/media/confirm', { key: signed.key })
 }
+
+// Deletes uploads that were never saved. The API keeps any file a record uses, so this is safe to
+// call for every upload made in an editor when it closes.
+export const discardMedia = (keys) =>
+  keys.length ? apiRequest('/api/admin/media/discard', { keys }) : Promise.resolve()

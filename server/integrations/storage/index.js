@@ -76,11 +76,15 @@ function s3Storage(storage) {
   }
 }
 
-// Reads the storage configuration (throwing if it is invalid) and returns the active storage.
-// Files uploaded to other storages keep their full URLs and keep loading from there.
+// Reads the storage configuration (throwing if it is invalid) and returns the active storage, which
+// receives new uploads. Every other configured R2/S3 storage stays reachable by its number, so files
+// uploaded there keep loading and can still be deleted.
 export function createStorage(env, log) {
   const { storages, active } = readStorageConfig(env, log.warn)
-  const usable = active?.direct ? active : null
+  const byNumber = new Map(
+    storages.filter((s) => s.direct).map((s) => [s.number, { ...s3Storage(s), number: s.number }]),
+  )
+  const usable = active?.direct ? byNumber.get(active.number) : null
   if (!active) log.info('Media uploads are disabled: no storage is configured')
   else if (!usable)
     log.warn(
@@ -95,6 +99,21 @@ export function createStorage(env, log) {
   return {
     enabled: Boolean(usable),
     active: active && { number: active.number, name: active.name, type: active.type },
-    ...(usable ? s3Storage(usable) : { keyFromUrl: () => null }),
+    ...(usable || { keyFromUrl: () => null }),
+    // Which configured storage a URL belongs to: { number, key }, or null for any other URL
+    locate(url) {
+      for (const [number, s] of byNumber) {
+        const key = s.keyFromUrl(url)
+        if (key) return { number, key }
+      }
+      return null
+    },
+    // Deletes a file from the storage with that number; false when that storage isn't configured
+    async removeFrom(number, key) {
+      const s = byNumber.get(Number(number))
+      if (!s) return false
+      await s.remove(key)
+      return true
+    },
   }
 }

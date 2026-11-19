@@ -16,6 +16,12 @@ try {
     await readFile(new URL('./migrations/20261116_product_media.sql', import.meta.url), 'utf8'),
   )
   await client.query(
+    await readFile(
+      new URL('./migrations/20261119_product_media_storage.sql', import.meta.url),
+      'utf8',
+    ),
+  )
+  await client.query(
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS specifications text NOT NULL DEFAULT '[]'",
   )
   await client.query(
